@@ -20,7 +20,10 @@ vi.mock("@/lib/prisma", async () => {
 });
 vi.mock("@/lib/env", () => ({ env: { DOSSIER_SECRET: "s".repeat(40), DOSSIER_PASSWORD: "argon2id:m=19456,t=2,p=1:c2FsdA:aGFzaA" } }));
 const fake = vi.hoisted(() => ({ aiUsable: false, fetched: { ok: true, text: "Fetched posting text", url: "https://jobs.example/fetched" } as Record<string, unknown> }));
-vi.mock("@/lib/ai/config", () => ({ isAiUsable: async () => fake.aiUsable }));
+vi.mock("@/lib/ai/config", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/ai/config")>()),
+  isAiUsable: async () => fake.aiUsable,
+}));
 vi.mock("@/lib/posting-fetch", () => ({ fetchPosting: vi.fn(async () => fake.fetched) }));
 vi.mock("@/lib/job-search/find", () => ({
   fullText: vi.fn(async () => "The whole posting from its source"),
@@ -191,6 +194,102 @@ describe("the Claude connector's tools (#221)", () => {
     const ledgerly = await prisma().application.findFirstOrThrow({ where: { company: "Ledgerly" } });
     await prisma().job.update({ where: { id: job.id }, data: { status: "DONE", error: null, result: { applicationId: ledgerly.id } } });
     expect((await tool("check_draft", { draft_id: job.id })).json).toMatchObject({ status: "done", application_id: ledgerly.id });
+  });
+
+  it("reads the dashboard and job agent queue without private notes", async () => {
+    const dashboard = await tool("get_dashboard", {});
+    expect(dashboard.json).toMatchObject({ total: expect.any(Number), by_status: expect.any(Object), link: "https://dossier.example/?period=all" });
+    expect(dashboard.text).not.toContain("Private:");
+
+    const agent = await tool("get_agent_status", {});
+    expect(agent.json).toMatchObject({ enabled: expect.any(Boolean), link: "https://dossier.example/agent" });
+
+    const candidate = await prisma().agentCandidate.create({
+      data: {
+        source: "JSEARCH",
+        externalId: "mcp-agent-1",
+        dedupeKey: "mcp-agent-1",
+        title: "MCP Designer",
+        company: "QueueCo",
+        score: 88,
+        reasons: ["Figma"],
+        redFlags: [],
+      },
+    });
+    const listed = await tool("list_agent_candidates", { section: "scored", limit: 5 });
+    expect(listed.json.candidates).toEqual(expect.arrayContaining([expect.objectContaining({ id: candidate.id, score: 88 })]));
+
+    const one = await tool("get_agent_candidate", { id: candidate.id });
+    expect(one.json).toMatchObject({ id: candidate.id, reasons: ["Figma"], status: "Scored" });
+    expect(await tool("get_agent_candidate", { id: "gone" })).toMatchObject({ isError: true });
+  });
+
+  it("approves an agent candidate like the Agent screen", async () => {
+    const ledgerly = await prisma().application.findFirstOrThrow({ where: { company: "Ledgerly" } });
+    await prisma().application.update({ where: { id: ledgerly.id }, data: { status: "DRAFT", awaitingReview: true } });
+    const candidate = await prisma().agentCandidate.create({
+      data: {
+        source: "JSEARCH",
+        externalId: "mcp-draft",
+        dedupeKey: "mcp-draft",
+        status: "DRAFTED",
+        applicationId: ledgerly.id,
+        title: "Product Designer",
+        company: "QueueCo",
+        score: 90,
+        reasons: [],
+        redFlags: [],
+      },
+    });
+    expect((await tool("approve_agent_candidate", { candidate_id: candidate.id })).json).toMatchObject({
+      application_id: ledgerly.id,
+      link: `https://dossier.example/applications/${ledgerly.id}`,
+    });
+    expect(await prisma().application.findUniqueOrThrow({ where: { id: ledgerly.id } })).toMatchObject({ awaitingReview: false });
+    expect((await tool("list_applications", { status: "DRAFT", limit: 50 })).json).toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: ledgerly.id })]),
+    );
+    expect(await tool("approve_agent_candidate", { candidate_id: candidate.id })).toMatchObject({ isError: true });
+  });
+
+  it("edits a Draft application's unit and keeps agent drafts off the tracker until approved", async () => {
+    const ledgerly = await prisma().application.findFirstOrThrow({ where: { company: "Ledgerly" } });
+    await prisma().application.update({ where: { id: ledgerly.id }, data: { awaitingReview: true, status: "DRAFT" } });
+    await prisma().agentCandidate.create({
+      data: {
+        source: "JSEARCH",
+        externalId: "mcp-edit",
+        dedupeKey: "mcp-edit",
+        status: "DRAFTED",
+        applicationId: ledgerly.id,
+        title: "X",
+        company: "Y",
+        score: 80,
+        reasons: [],
+        redFlags: [],
+      },
+    });
+    expect(await tool("update_application_unit", { id: ledgerly.id, document: "RESUME", unit_id: "summary", text: "Nope", expected: "" })).toMatchObject({
+      isError: true,
+      text: expect.stringContaining("Agent screen"),
+    });
+
+    await prisma().application.update({ where: { id: ledgerly.id }, data: { awaitingReview: false } });
+    const read = await tool("get_application", { id: ledgerly.id });
+    const summary = /## Summary\n([\s\S]*?)(\n## |$)/.exec(read.json.resume as string)?.[1]?.trim() ?? "";
+    const edited = await tool("update_application_unit", { id: ledgerly.id, document: "RESUME", unit_id: "summary", text: "  Updated summary.  ", expected: summary });
+    expect(edited.json).toMatchObject({ changed: true, text: "Updated summary." });
+    expect(
+      await tool("update_application_unit", { id: ledgerly.id, document: "RESUME", unit_id: "summary", text: "Stale edit.", expected: summary }),
+    ).toMatchObject({ isError: true, text: expect.stringContaining("changed since you read it") });
+    const again = await tool("update_application_unit", { id: ledgerly.id, document: "RESUME", unit_id: "summary", text: "Updated summary.", expected: "Updated summary." });
+    expect(again.json).toMatchObject({ changed: false });
+
+    await prisma().application.update({ where: { id: ledgerly.id }, data: { status: "SENT" } });
+    expect(await tool("update_application_unit", { id: ledgerly.id, document: "RESUME", unit_id: "summary", text: "X", expected: "Updated summary." })).toMatchObject({ isError: true });
+    expect(
+      await tool("update_application_unit", { id: ledgerly.id, document: "COVER_LETTER", unit_id: "sender", text: "Hi", expected: "" }),
+    ).toMatchObject({ isError: true, text: expect.stringContaining("contact details") });
   });
 
   it("shows more of a search, and scores postings handed over by id", async () => {

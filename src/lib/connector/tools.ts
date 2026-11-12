@@ -3,8 +3,14 @@ import "server-only";
 import { McpServer, type CallToolResult } from "@modelcontextprotocol/server";
 import { z } from "zod";
 
-import { ApplicationStatus, DocumentKind } from "@/generated/prisma/enums";
+import { AgentCandidateStatus, ApplicationStatus, DocumentKind } from "@/generated/prisma/enums";
+import { stringsOf } from "@/lib/agent/candidates";
 import { approveCandidate } from "@/lib/agent/draft";
+import { countAgentQueue, loadAgentView } from "@/lib/agent/view";
+import { ActionError } from "@/lib/action";
+import { DASHBOARD_PERIODS, type DashboardPeriod } from "@/lib/dashboard";
+import { loadDashboard } from "@/lib/dashboard-data";
+import { updateDocuments } from "@/lib/document-units";
 import { isAiUsable } from "@/lib/ai/config";
 import { profileForPrompt } from "@/lib/ai/tasks/prompt-parts";
 import { scoreFrom } from "@/lib/ai/tasks/score-posting";
@@ -14,7 +20,8 @@ import { countryCodeFor, countryName } from "@/lib/job-search/countries";
 import { fullText } from "@/lib/job-search/find";
 import { DEFAULT_RADIUS_KM, foundPostingSchema, POSTED_WITHIN, postingText, RADII_KM, type FoundPosting, type PostedWithin, type SearchQuery, type ShownPosting } from "@/lib/job-search/search";
 import { getJob, startJob } from "@/lib/jobs/runner";
-import { withoutPrivateParts } from "@/lib/letter-frame";
+import { isFrameUnit, PRIVATE_FRAME_UNITS, withFrame, withoutPrivateParts } from "@/lib/letter-frame";
+import { cleanUnitText } from "@/lib/unit-text";
 import { fetchPosting } from "@/lib/posting-fetch";
 import { saveScore } from "@/lib/posting-scores";
 import { loadSearch, runSearch, showMoreFor } from "@/lib/posting-searches";
@@ -31,12 +38,14 @@ import { connectorDraftJob } from "./draft";
 import { readPastedPosting } from "./handoff";
 import { saveWrittenApplication, WRITTEN_IN_CLAUDE, writtenDetailsSchema, writtenLetterSchema, writtenMatchSchema, writtenResumeSchema } from "./write";
 
-// The Claude connector's tools (#221, src/app/api/mcp), adapted from Anirudh
+// The MCP connector's tools (#221, src/app/api/mcp), adapted from Anirudh
 // Sharma's fork of Dossier: search for jobs, read the profile and the
-// applications, save applications and fit scores, and move applications
-// along. Like the AI features, they never send anything, and no tool
-// deletes or archives. Contact details, private notes and the letter's
-// sender and signature stay out of what Claude is given.
+// applications, save applications and fit scores, move applications along,
+// read the dashboard and job agent queue, approve agent drafts, and
+// edit Draft resume or cover letter units by hand. Like the AI features, they
+// never send anything, and no tool deletes or archives applications. Contact
+// details, private notes and the letter's sender and signature stay out of what
+// external agents are given, and cannot be edited through the connector.
 
 const text = (value: unknown): CallToolResult => ({ content: [{ type: "text", text: typeof value === "string" ? value : JSON.stringify(value, null, 2) }] });
 const failure = (message: string): CallToolResult => ({ content: [{ type: "text", text: message }], isError: true });
@@ -70,6 +79,25 @@ function documentText(units: unknown): string {
   return withoutPrivateParts(parsed.data)
     .map((unit) => `## ${unit.label || unit.id}\n${unit.text}`)
     .join("\n\n");
+}
+
+const CONNECTOR_DOCUMENTS = [DocumentKind.RESUME, DocumentKind.COVER_LETTER] as const;
+type ConnectorDocument = (typeof CONNECTOR_DOCUMENTS)[number];
+
+const AGENT_QUEUE_SECTIONS = ["drafts", "scored", "below_minimum"] as const;
+type AgentQueueSection = (typeof AGENT_QUEUE_SECTIONS)[number];
+
+const agentStatusLabel = (status: AgentCandidateStatus) =>
+  status === AgentCandidateStatus.DRAFTED ? "Awaiting your review" : status === AgentCandidateStatus.DRAFTING ? "Drafting" : "Scored";
+
+/** Turns an action-layer error into a tool error answer. */
+const actionFailure = (error: unknown): CallToolResult =>
+  failure(error instanceof ActionError ? error.message : "Dossier couldn't do that.");
+
+/** Units an MCP client may edit: not contact frame parts. */
+function assertEditableUnit(_document: ConnectorDocument, unitId: string): string | null {
+  if (PRIVATE_FRAME_UNITS.has(unitId)) return "That part has contact details. Edit it in Dossier.";
+  return null;
 }
 
 /** Where a posting comes from, in a tool's input. */
@@ -134,12 +162,12 @@ export function createDossierServer(origin: string): McpServer {
     {
       instructions:
         "Dossier is the user's own job search app: one profile, tailored resumes and cover letters, and every application tracked. " +
-        "Search jobs with search_jobs (in the profile's city and country unless the user says otherwise), " +
-        "and when the user wants to know which fit best, score them against the profile and save the scores with save_job_scores. " +
-        "To draft an application, you write it yourself: call get_profile and get_posting, write a tailored resume and cover letter " +
-        "from facts in the profile only (never invent experience, employers, numbers or degrees; say what's missing instead), " +
-        "show the user a short summary, then save it with save_application. Read or update applications with the other tools. " +
-        "Nothing is ever sent for the user: drafts wait in Dossier for them to review and download as PDFs.",
+        "Typical flow: search_jobs → save_job_scores → get_posting → save_application (or draft_application and check_draft), then update_application_unit while the user reviews. " +
+        "For the job agent: get_agent_status and list_agent_candidates; inspect a draft with get_agent_candidate; approve_agent_candidate only when the user wants it in Applications (nothing is sent). Dismiss postings in Dossier's Agent screen. " +
+        "get_dashboard shows what needs attention; list_applications and get_application read saved applications (not agent drafts until approved). " +
+        "Search jobs in the profile's city and country unless the user says otherwise. " +
+        "Write applications from get_profile facts only (never invent experience). Private notes, contact details, and the letter's sender and signature are never exposed. " +
+        "Nothing is ever sent for the user.",
     },
   );
 
@@ -475,6 +503,233 @@ export function createDossierServer(origin: string): McpServer {
       const result = await applyStatusChange(prisma, id, status);
       if (result.outcome === "not-found") return failure("That application no longer exists.");
       return text({ id, status: statusInfo(status).label, changed: result.outcome !== "unchanged" });
+    },
+  );
+
+  server.registerTool(
+    "get_dashboard",
+    {
+      title: "Read the dashboard",
+      description:
+        "High-level figures from the dashboard: how many applications are in each status, funnel sent/heard-back counts, and up to twenty Worth a look items. Private notes are not included.",
+      inputSchema: z.object({
+        period: z.enum(DASHBOARD_PERIODS.map((entry) => entry.value) as [DashboardPeriod, ...DashboardPeriod[]]).optional().describe("30d, 90d or all. Defaults to the user's last choice in Dossier."),
+      }),
+      annotations: { readOnlyHint: true },
+    },
+    async ({ period: chosen }) => {
+      const settings = await loadSettings();
+      const period = chosen ?? settings.dashboardPeriod;
+      const figures = await loadDashboard({ period, quietDays: settings.quietDays });
+      const byStatus = Object.fromEntries(
+        (Object.entries(figures.byStatus) as [ApplicationStatus, number][]).map(([status, count]) => [statusInfo(status).label, count]),
+      );
+      return text({
+        period,
+        total: figures.total,
+        by_status: byStatus,
+        sent: figures.sent,
+        heard_back: figures.heardBack,
+        heard_back_percent: figures.heardBackPercent,
+        attention: figures.attention.slice(0, 20).map((item) => ({
+          id: item.id,
+          company: item.company,
+          role: item.role,
+          status: statusInfo(item.status).label,
+          reason: item.reason,
+          action: item.action,
+          link: linkTo(item.tab === "conversation" ? `/applications/${item.id}?tab=conversation` : `/applications/${item.id}`),
+        })),
+        link: linkTo(`/?period=${period}`),
+      });
+    },
+  );
+
+  server.registerTool(
+    "get_agent_status",
+    {
+      title: "Read the job agent",
+      description:
+        "Whether the job agent is on, its limits and schedule, setup problems, and how many scored postings and drafts await review. Does not expose provider credentials or settings.",
+      annotations: { readOnlyHint: true },
+    },
+    async () => {
+      const [view, queue] = await Promise.all([loadAgentView(), countAgentQueue()]);
+      return text({
+        enabled: view.enabled,
+        auto_draft: view.autoDraft,
+        min_score: view.minScore,
+        queue_badge: queue,
+        drafts_awaiting_review: view.drafts.length,
+        scored_in_queue: view.scored.length,
+        below_minimum: view.belowMinimum.length,
+        source_requests_used_24h: view.sourceRequestsUsed,
+        limit_reached: view.limitReached,
+        setup_problem: view.setupProblem,
+        last_run: view.lastRun,
+        next_run: view.nextRun,
+        run_in_progress: view.runJobId !== null,
+        link: linkTo("/agent"),
+      });
+    },
+  );
+
+  server.registerTool(
+    "list_agent_candidates",
+    {
+      title: "List job agent candidates",
+      description:
+        "Postings the job agent scored or drafted: drafts (awaiting your review), scored (at or above the minimum score, not yet drafted), or below_minimum. Newest scores first.",
+      inputSchema: z.object({
+        section: z.enum(AGENT_QUEUE_SECTIONS).describe("drafts, scored or below_minimum"),
+        limit: z.number().int().min(1).max(50).optional(),
+      }),
+      annotations: { readOnlyHint: true },
+    },
+    async ({ section, limit }) => {
+      const { agentMinScore } = await loadSettings();
+      const take = limit ?? 30;
+      const rows = await prisma.agentCandidate.findMany({
+        where:
+          section === "drafts"
+            ? { status: AgentCandidateStatus.DRAFTED, applicationId: { not: null } }
+            : section === "scored"
+              ? { status: { in: [AgentCandidateStatus.SCORED, AgentCandidateStatus.DRAFTING] }, score: { gte: agentMinScore } }
+              : { status: { in: [AgentCandidateStatus.SCORED, AgentCandidateStatus.DRAFTING] }, score: { lt: agentMinScore } },
+        orderBy: [{ score: "desc" }, { createdAt: "desc" }],
+        take,
+        select: { id: true, title: true, company: true, place: true, score: true, status: true, applicationId: true, url: true },
+      });
+      return text({
+        section,
+        candidates: rows.map((row) => ({
+          id: row.id,
+          title: row.title,
+          company: row.company,
+          place: row.place || undefined,
+          score: row.score,
+          status: agentStatusLabel(row.status),
+          application_id: row.applicationId ?? undefined,
+          posting: row.url || undefined,
+          link: linkTo("/agent"),
+        })),
+        link: linkTo("/agent"),
+      });
+    },
+  );
+
+  server.registerTool(
+    "get_agent_candidate",
+    {
+      title: "Read a job agent candidate",
+      description:
+        "One agent candidate with its fit score, reasons and red flags. When a draft exists, includes the tailored resume and cover letter (same redaction as get_application: no private notes, sender or signature). Agent drafts are not in list_applications until approve_agent_candidate.",
+      inputSchema: z.object({ id: z.string().min(1).max(100) }),
+      annotations: { readOnlyHint: true },
+    },
+    async ({ id }) => {
+      const candidate = await prisma.agentCandidate.findUnique({ where: { id } });
+      if (!candidate || candidate.status === AgentCandidateStatus.DISMISSED) return failure("That posting is no longer in the agent's queue.");
+      const payload: Record<string, unknown> = {
+        id: candidate.id,
+        title: candidate.title,
+        company: candidate.company,
+        place: candidate.place || undefined,
+        score: candidate.score,
+        status: agentStatusLabel(candidate.status),
+        reasons: stringsOf(candidate.reasons),
+        red_flags: stringsOf(candidate.redFlags),
+        error: candidate.error,
+        posting: candidate.url || undefined,
+        application_id: candidate.applicationId ?? undefined,
+        link: linkTo("/agent"),
+      };
+      if (candidate.applicationId) {
+        const application = await prisma.application.findUnique({
+          where: { id: candidate.applicationId },
+          select: { match: true, documents: { select: { kind: true, units: true } } },
+        });
+        if (application) {
+          const doc = (kind: DocumentKind) => documentText(application.documents.find((document) => document.kind === kind)?.units);
+          payload.match = application.match;
+          payload.resume = doc(DocumentKind.RESUME);
+          payload.cover_letter = doc(DocumentKind.COVER_LETTER);
+        }
+      }
+      return text(payload);
+    },
+  );
+
+  server.registerTool(
+    "approve_agent_candidate",
+    {
+      title: "Approve an agent draft",
+      description:
+        "Moves an agent-prepared draft into Applications as a normal Draft (same as Approve on the Agent screen). Nothing is sent. The candidate must be in Awaiting your review with a draft ready; use get_agent_candidate to check.",
+      inputSchema: z.object({ candidate_id: z.string().min(1).max(100) }),
+      annotations: { readOnlyHint: false, idempotentHint: true },
+    },
+    async ({ candidate_id }) => {
+      try {
+        const applicationId = await approveCandidate(candidate_id);
+        return text({ candidate_id, application_id: applicationId, status: "Draft", link: linkTo(`/applications/${applicationId}`) });
+      } catch (error) {
+        return actionFailure(error);
+      }
+    },
+  );
+
+  server.registerTool(
+    "update_application_unit",
+    {
+      title: "Edit a draft document part",
+      description:
+        "Saves hand-edited text for one resume or cover letter unit on a Draft application (same rules as Dossier's editor). Pass expected as the text from get_application or get_agent_candidate so a concurrent change isn't overwritten. Resume and cover letter only; not the application email. Sender and signature cannot be edited here.",
+      inputSchema: z.object({
+        id: z.string().min(1).max(100).describe("The application id"),
+        document: z.enum(CONNECTOR_DOCUMENTS),
+        unit_id: z.string().min(1).max(200),
+        text: z.string().max(10_000),
+        expected: z.string().max(100_000).describe("The unit text before your edit, from get_application or get_agent_candidate"),
+      }),
+      annotations: { readOnlyHint: false, idempotentHint: true },
+    },
+    async ({ id, document, unit_id, text: raw, expected }) => {
+      const blocked = assertEditableUnit(document, unit_id);
+      if (blocked) return failure(blocked);
+
+      const application = await prisma.application.findUnique({ where: { id }, select: { status: true, awaitingReview: true } });
+      if (!application) return failure("That application no longer exists.");
+      if (application.awaitingReview) return failure("That draft is still on the Agent screen. Call approve_agent_candidate first, or edit it with get_agent_candidate only.");
+      if (application.status !== ApplicationStatus.DRAFT) return failure("Only Draft applications can be edited through the connector.");
+
+      const clean = cleanUnitText(unit_id, raw);
+      if (!clean) return failure("Write something first.");
+
+      let changed = false;
+      try {
+        await updateDocuments(id, async (documents) => {
+          const units = documents[document];
+          const unit = units?.find((entry) => entry.id === unit_id);
+          if (!unit && units && document === DocumentKind.COVER_LETTER && isFrameUnit(unit_id)) {
+            documents[document] = withFrame(units, { [unit_id]: clean });
+            changed = true;
+            return;
+          }
+          if (!unit) throw new ActionError("That part of the document no longer exists.");
+          if (unit.text !== expected) {
+            throw new ActionError("This part changed since you read it. Read the application again, then retry with the new text as expected.");
+          }
+          if (unit.text === clean) return;
+          unit.text = clean;
+          delete unit.unverified;
+          changed = true;
+        });
+      } catch (error) {
+        return actionFailure(error);
+      }
+
+      return text({ id, document, unit_id, changed, text: clean, link: linkTo(`/applications/${id}`) });
     },
   );
 
