@@ -1,4 +1,6 @@
 // Opens the app's menus from the top bar, and takes its colours from main.ts.
+document.body.dataset.platform = window.bar.platform;
+
 for (const button of document.querySelectorAll("button[data-menu]")) {
   button.addEventListener("click", () => {
     const { left, bottom } = button.getBoundingClientRect();
