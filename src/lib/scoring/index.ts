@@ -10,8 +10,9 @@ import { postingText, type FoundPosting } from "@/lib/job-search/search";
 import type { ProfileData } from "@/lib/profile";
 import { recordUsage } from "@/lib/usage-data";
 
-import { jevKey, loadScoringConfig, type ScoringConfig } from "./config";
+import { jevKey, loadScoringConfig, openRouterKey, type ScoringConfig } from "./config";
 import { scoreWithJev } from "./jev";
+import { scoreWithOpenRouter } from "./openrouter";
 
 // Scoring a posting against the profile (#208, #274), with whatever Settings →
 // Scoring chose: the AI model's score-posting, or Jev. Find jobs' Score and
@@ -28,6 +29,7 @@ export const AI_PROVIDER_MISSING = "Choose an AI provider in Settings → AI pro
 export async function scoringProblem(config?: ScoringConfig): Promise<string | null> {
   const settled = config ?? (await loadScoringConfig());
   if (settled.scorer === "JEV") return jevKey(settled).problem;
+  if (settled.scorer === "OPENROUTER") return openRouterKey(settled).problem;
   return (await isAiConfigured()) ? null : AI_PROVIDER_MISSING;
 }
 
@@ -42,6 +44,13 @@ export async function loadPostingScorer(): Promise<PostingScorer> {
     if (jev.problem !== null) throw AiError.config(jev.problem);
     const { key } = jev;
     return (posting, profile, signal) => scoreWithJev(posting, profile, { key, signal, onUsage: recordUsage });
+  }
+  if (config.scorer === "OPENROUTER") {
+    const judge = openRouterKey(config);
+    if (judge.problem !== null) throw AiError.config(judge.problem);
+    const { key, model } = judge;
+    const timeoutMs = 120_000;
+    return (posting, profile, signal) => scoreWithOpenRouter(posting, profile, { key, model, timeoutMs, signal, onUsage: recordUsage });
   }
   if (!(await isAiConfigured())) throw AiError.config(AI_PROVIDER_MISSING);
   const [provider, options] = await Promise.all([getAiProvider(), loadTaskOptions()]);

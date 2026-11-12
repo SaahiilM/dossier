@@ -74,12 +74,12 @@ export function scoreFrom(answer: z.infer<typeof answerSchema>): PostingScore {
 }
 
 /** E16-2: how well a posting fits the profile. Contact details and references are never sent. */
-export const scorePosting: Task<ScorePostingInput, PostingScore> = async (provider, input, { signal }) => {
+export const scorePosting: Task<ScorePostingInput, PostingScore> = async (provider, input, { signal, usageTask }) => {
   const { posting, profile, title, company, place, remote, salary, today = new Date() } = input;
   // Models add up date ranges badly, and seniority is judged on it (#279).
   const years = Math.floor(experienceMonths(profile, today) / 12);
   const answer = await provider.complete({
-    task: "score-posting",
+    task: usageTask ?? "score-posting",
     system: system(
       INSTRUCTIONS,
       "Use only facts that are in the candidate's profile. Never invent or assume an employer, skill, date or credential.",

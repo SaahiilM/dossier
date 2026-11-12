@@ -81,7 +81,7 @@ export class OpenAICompatibleProvider extends BaseProvider {
   private readonly server: Server | undefined;
 
   constructor(
-    readonly kind: "OPENAI" | "LOCAL" | "MISTRAL" | "LMSTUDIO",
+    readonly kind: "OPENAI" | "LOCAL" | "MISTRAL" | "LMSTUDIO" | "OPENROUTER",
     baseURL: string,
     apiKey: string | null,
     model: string | null,
@@ -98,7 +98,7 @@ export class OpenAICompatibleProvider extends BaseProvider {
       apiKey: apiKey || "not-needed",
       timeout: timeoutMs,
       maxRetries: 1,
-      defaultHeaders: { ...(apiKey ? {} : { Authorization: null }), ...this.server?.headers?.() },
+      defaultHeaders: { ...(apiKey ? {} : { Authorization: null }), ...(kind === "OPENROUTER" ? { "HTTP-Referer": "https://dossier.app", "X-Title": "Dossier" } : {}), ...this.server?.headers?.() },
       // With a key attached, no redirects to other hosts (E11-5).
       ...(apiKey ? { fetch: keyGuardedFetch() } : {}),
     });
@@ -187,6 +187,15 @@ export class OpenAICompatibleProvider extends BaseProvider {
         : json === "object"
           ? { response_format: { type: "json_object" as const } }
           : {};
+    const serverChat = this.server?.chat ?? {};
+    const requireStructured =
+      call.json !== undefined && json === "schema" && (this.kind === "OPENROUTER" || this.server?.domain === "openrouter.ai");
+    const chatExtras =
+      requireStructured && serverChat.provider && typeof serverChat.provider === "object"
+        ? { ...serverChat, provider: { ...serverChat.provider, require_parameters: true } }
+        : requireStructured
+          ? { ...serverChat, provider: { require_parameters: true, ...(serverChat.provider as object | undefined) } }
+          : serverChat;
     const completion = await this.client.chat.completions.create(
       {
         model: call.model,
@@ -194,7 +203,7 @@ export class OpenAICompatibleProvider extends BaseProvider {
         ...(noTemperature || call.temperature === undefined ? {} : { temperature: call.temperature }),
         ...(maxCompletionTokens ? { max_completion_tokens: maxTokens } : { max_tokens: maxTokens }),
         ...(effort ? { reasoning_effort: effort } : {}),
-        ...this.server?.chat,
+        ...chatExtras,
         ...responseFormat,
       },
       { signal: call.signal },
