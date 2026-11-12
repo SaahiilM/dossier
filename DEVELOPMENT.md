@@ -14,6 +14,17 @@ docker compose up
 
 Open [http://localhost:3000](http://localhost:3000). Source is bind-mounted, so edits hot-reload.
 
+### Native stack on macOS (Node 24)
+
+For the Electron shell against a host Next dev server (separate from Docker Compose), use Node.js **24.x** (`nvm use 24`, or Corepack with the repo’s pinned Yarn). Install dependencies at the repo root and in `desktop/` once (`yarn install` in each).
+
+1. `bash scripts/dev-local.sh setup-env` — writes a gitignored `.env` under the repo root and a SQLite file under `data/`; random secrets stay on disk and are not printed.
+2. `yarn dev:local` — starts Next on `127.0.0.1` and an unpacked Electron app with user data in `data/desktop-user-data/`; the desktop window signs in with the generated token (no password entry).
+3. `yarn dev:local:status` — checks that `/login` answers and that Next and Electron are still running; logs are under `data/logs/`.
+4. `yarn dev:local:stop` — stops the dev processes.
+
+Do not commit `.env`, `data/`, or other local artifacts. Override the port with `DOSSIER_DEV_PORT` in `.env` if needed.
+
 `.env.example` documents every variable. The server refuses to start while `DOSSIER_PASSWORD` or `DOSSIER_SECRET` is missing, `DOSSIER_PASSWORD` isn't a password hash, or the secret is shorter than 32 characters, and logs which variable to fix.
 Server code reads configuration from the validated `env` object instead of `process.env`:
 

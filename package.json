@@ -5,6 +5,9 @@
   "license": "AGPL-3.0-only",
   "scripts": {
     "dev": "next dev",
+    "dev:local": "bash scripts/dev-local.sh start",
+    "dev:local:stop": "bash scripts/dev-local.sh stop",
+    "dev:local:status": "bash scripts/dev-local.sh status",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
