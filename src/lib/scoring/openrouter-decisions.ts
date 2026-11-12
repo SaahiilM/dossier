@@ -7,7 +7,7 @@ import type { PostingFit } from "@/lib/fit";
 import type { ProfileData } from "@/lib/profile";
 import type { UsageSink } from "@/lib/usage";
 
-import { jevFit, jevParts, jevQuestions, jevState, type JevPosting } from "./jev";
+import { jevFit, jevParts, jevPostingText, jevQuestions, jevState, type JevPosting } from "./jev";
 import { postingLines } from "./posting-lines";
 import { OPENROUTER_DECISION_MODEL } from "./scorers";
 import { answerSchema, type Answer, type Question } from "./typesafe";
@@ -20,7 +20,7 @@ import { answerSchema, type Answer, type Question } from "./typesafe";
 // Direct scorer: the same questions, weights, and line evidence as Jev.
 // It is not the benchmark early-gate plus chat cascade.
 
-export const SCORE_POSTING_OPENROUTER_DECISIONS_VERSION = "score-posting-openrouter-decisions@1";
+export const SCORE_POSTING_OPENROUTER_DECISIONS_VERSION = "score-posting-openrouter-decisions@3";
 
 export const DECISIONS_URL = "https://openrouter.ai/api/alpha/decisions";
 export const DECISION_CATALOG_URL = "https://openrouter.ai/api/v1/models?output_modalities=decisions";
@@ -295,17 +295,18 @@ export function decisionScoredWith(model: string, costUsd: number | null): strin
  * Scores `posting` with an OpenRouter decision model. `scoredWith` names this
  * version, the model the response returned, and the cost the response reported.
  *
- * ponytail: the fit is `jevFit` with no extra gate. A missing required line is a red flag only and does not cap the score. A noul from 0.3 to 0.7 counts as no. The language question has no human-language criteria. The state has no experience-year total and no today's date. Upgrade path: a separate eligibility change. Do not turn auto-draft on for this scorer until that lands.
  */
 export async function scoreWithOpenRouterDecisions(
   posting: JevPosting,
   profile: ProfileData,
-  { key, model, signal, fetchImpl, timeoutMs, retryDelaysMs, onUsage }: AskDecisionOptions & { model: string },
+  { key, model, signal, fetchImpl, timeoutMs, retryDelaysMs, onUsage, today = new Date() }: AskDecisionOptions & { model: string; today?: Date },
 ): Promise<{ data: PostingFit; scoredWith: string }> {
   const pin = await resolveDecisionPin(model, { fetchImpl, signal });
-  const lines = postingLines(posting.description);
+  const text = jevPostingText(posting.description);
+  const trimmed = { ...posting, description: text };
+  const lines = postingLines(text);
   const result = await askOpenRouterDecision(
-    { model: pin.id, canonicalSnapshot: pin.canonicalSnapshot, state: jevState(posting, profile), questions: jevQuestions(lines) },
+    { model: pin.id, canonicalSnapshot: pin.canonicalSnapshot, state: jevState(trimmed, profile, today), questions: jevQuestions(lines) },
     { key, signal, fetchImpl, timeoutMs, retryDelaysMs, onUsage, usageTask: "score-posting-openrouter-decisions" },
   );
   const parts = jevParts(result.answers, lines, (id) => new AiError("invalid-output", INVALID, `OpenRouter decision answer without ${id}`));
