@@ -22,7 +22,8 @@ export type ChoiceQuestion = { type: "choice"; instructions: Content; criteria: 
 export type Question = ScoreQuestion | NoulQuestion | ChoiceQuestion;
 
 const probabilities = z.record(z.string(), z.number());
-const answerSchema = z.discriminatedUnion("type", [
+/** Score, noul, and choice answers. OpenRouter Decisions uses this same shape. */
+export const answerSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("score"), score: z.number(), confidence: z.number(), probabilities }),
   z.object({ type: z.literal("noul"), noul: z.number() }),
   z.object({ type: z.literal("choice"), choice: z.string(), confidence: z.number(), probabilities }),

@@ -133,10 +133,14 @@ export type JevParts = {
 const clamp = (value: number) => Math.min(1, Math.max(0, Number.isFinite(value) ? value : 0));
 
 /** The answers to `jevQuestions(lines)`; one missing or of the wrong kind means the answer can't be trusted. */
-export function jevParts(answers: Record<string, Answer>, lines: readonly string[]): JevParts {
+export function jevParts(
+  answers: Record<string, Answer>,
+  lines: readonly string[],
+  invalid: (id: string) => Error = (id) => typesafeError("invalid-output", `TypeSafe answer without ${id}`),
+): JevParts {
   const answer = <T extends Answer["type"]>(id: string, type: T) => {
     const found = answers[id];
-    if (found?.type !== type) throw typesafeError("invalid-output", `TypeSafe answer without ${id}`);
+    if (found?.type !== type) throw invalid(id);
     return found as Extract<Answer, { type: T }>;
   };
   const level = (id: string, question: ScoreQuestion) => clamp(answer(id, "score").score / (question.criteria.length - 1));

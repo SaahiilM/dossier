@@ -10,13 +10,15 @@ import { postingText, type FoundPosting } from "@/lib/job-search/search";
 import type { ProfileData } from "@/lib/profile";
 import { recordUsage } from "@/lib/usage-data";
 
-import { jevKey, loadScoringConfig, openRouterKey, type ScoringConfig } from "./config";
+import { jevKey, loadScoringConfig, openRouterDecisionTarget, openRouterKey, type ScoringConfig } from "./config";
 import { scoreWithJev } from "./jev";
 import { scoreWithOpenRouter } from "./openrouter";
+import { scoreWithOpenRouterDecisions } from "./openrouter-decisions";
 
 // Scoring a posting against the profile (#208, #274), with whatever Settings →
-// Scoring chose: the AI model's score-posting, or Jev. Find jobs' Score and
-// the job agent both come here.
+// Scoring chose: the AI model's score-posting, Jev, an OpenRouter decision
+// model, or an OpenRouter chat model. Find jobs' Score and the job agent
+// both come here.
 
 export type ScorablePosting = Pick<FoundPosting, "title" | "company" | "place" | "remote" | "salary" | "description">;
 
@@ -29,6 +31,7 @@ export const AI_PROVIDER_MISSING = "Choose an AI provider in Settings → AI pro
 export async function scoringProblem(config?: ScoringConfig): Promise<string | null> {
   const settled = config ?? (await loadScoringConfig());
   if (settled.scorer === "JEV") return jevKey(settled).problem;
+  if (settled.scorer === "OPENROUTER_DECISIONS") return openRouterDecisionTarget(settled).problem;
   if (settled.scorer === "OPENROUTER") return openRouterKey(settled).problem;
   return (await isAiConfigured()) ? null : AI_PROVIDER_MISSING;
 }
@@ -44,6 +47,12 @@ export async function loadPostingScorer(): Promise<PostingScorer> {
     if (jev.problem !== null) throw AiError.config(jev.problem);
     const { key } = jev;
     return (posting, profile, signal) => scoreWithJev(posting, profile, { key, signal, onUsage: recordUsage });
+  }
+  if (config.scorer === "OPENROUTER_DECISIONS") {
+    const decision = openRouterDecisionTarget(config);
+    if (decision.problem !== null) throw AiError.config(decision.problem);
+    const { key, model } = decision;
+    return (posting, profile, signal) => scoreWithOpenRouterDecisions(posting, profile, { key, model, signal, onUsage: recordUsage });
   }
   if (config.scorer === "OPENROUTER") {
     const judge = openRouterKey(config);

@@ -1,7 +1,7 @@
-// What can score postings (#274): the AI model in Settings → AI provider,
-// or TypeSafe's Jev. Shared by the server and Settings → Scoring.
+// What can score postings (#274): the AI model, Jev, an OpenRouter decision
+// model, or an OpenRouter chat model. Shared by the server and Settings → Scoring.
 
-export const SCORERS = ["AI", "JEV", "OPENROUTER"] as const;
+export const SCORERS = ["AI", "JEV", "OPENROUTER_DECISIONS", "OPENROUTER"] as const;
 export type Scorer = (typeof SCORERS)[number];
 
 /** Like the job sources' keys: saved here, from DOSSIER_TYPESAFE_KEY, missing, or saved under another DOSSIER_SECRET. */
@@ -14,6 +14,8 @@ export type ScoringView = {
   keyState: ScoringKeyState;
   openRouterKeyState: ScoringKeyState;
   openRouterModel: string;
+  /** Which environment variable supplies the OpenRouter scoring key, when that key comes from the environment. */
+  openRouterKeyEnv?: "DOSSIER_OPENROUTER_SCORING_KEY" | "OPENROUTER_API_KEY";
 };
 
 export const SCORER_INFO: Record<Scorer, { name: string; description: string; tag: string }> = {
@@ -27,12 +29,31 @@ export const SCORER_INFO: Record<Scorer, { name: string; description: string; ta
     description: "A model made for quick judgments. It answers questions about the posting, and Dossier builds the score and the reasons from the posting's own lines.",
     tag: "Needs a TypeSafe key",
   },
+  OPENROUTER_DECISIONS: {
+    name: "OpenRouter decision model",
+    description: "A free OpenRouter decision model answers the same questions as Jev. Dossier builds the score from those answers and quotes the posting's own lines. It writes no prose.",
+    tag: "Default perplexity/pplx-decider-v1.3:free",
+  },
   OPENROUTER: {
-    name: "OpenRouter model",
-    description: "A separately configured OpenRouter model scores postings and explains its assessment.",
-    tag: "Needs an OpenRouter key and judging model",
+    name: "OpenRouter chat model",
+    description: "A separately configured OpenRouter chat model scores postings and writes its own explanation.",
+    tag: "Needs an OpenRouter key and a chat model",
   },
 };
+
+/** The free decision model Settings offers when OpenRouter decision scoring is chosen. */
+export const OPENROUTER_DECISION_MODEL = "perplexity/pplx-decider-v1.3:free";
+
+/**
+ * The model saved with a switch to decision scoring. A model id that does not
+ * end in `:free` is replaced by the free default. A `:free` id is kept.
+ */
+export function decisionModelOnSelect(current: string | null, scorer: Scorer): string | undefined {
+  if (scorer !== "OPENROUTER_DECISIONS") return undefined;
+  const model = current?.trim() ?? "";
+  if (model.endsWith(":free")) return undefined;
+  return OPENROUTER_DECISION_MODEL;
+}
 
 export const TYPESAFE_KEY_URL = "https://console.typesafe.ai/keys";
 

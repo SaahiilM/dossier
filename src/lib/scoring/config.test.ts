@@ -2,13 +2,19 @@ import { describe, expect, it, vi } from "vitest";
 
 import { encryptSecret, JOB_SOURCE_KEY, OPENROUTER_SCORING_KEY, TYPESAFE_KEY } from "@/lib/secrets";
 
-import { jevKey, openRouterKey, resolveScoringConfig, scoringView } from "./config";
+import { OPENROUTER_DECISION_MODEL, decisionModelOnSelect } from "./scorers";
+import { jevKey, openRouterDecisionTarget, openRouterKey, resolveScoringConfig, scoringView } from "./config";
 
 vi.mock("@/lib/env", () => ({ env: { DOSSIER_SECRET: "a".repeat(32) } }));
 
 const openRouterEmpty = { openRouterScoringModel: null, openRouterScoringKeyEnc: null };
 const nothingSaved = { scorer: null, typesafeKeyEnc: null, ...openRouterEmpty };
-const orFields = { openRouterModel: "", openRouterKey: null, openRouterKeyState: "none" as const };
+const orFields = {
+  openRouterModel: "",
+  openRouterKey: null,
+  openRouterKeyState: "none" as const,
+  openRouterKeyEnv: "DOSSIER_OPENROUTER_SCORING_KEY" as const,
+};
 
 describe("resolveScoringConfig (#274)", () => {
   it("scores with the AI model until something chooses Jev", () => {
@@ -81,11 +87,12 @@ describe("jevKey and scoringView", () => {
   });
 
   it("never shows the key", () => {
-    expect(scoringView({ scorer: "JEV", saved: true, key: "ts_secret", keyState: "set", openRouterModel: "", openRouterKey: null, openRouterKeyState: "none" })).toEqual({
+    expect(scoringView({ scorer: "JEV", saved: true, key: "ts_secret", keyState: "set", openRouterModel: "", openRouterKey: null, openRouterKeyState: "none", openRouterKeyEnv: "DOSSIER_OPENROUTER_SCORING_KEY" })).toEqual({
       scorer: "JEV",
       keyState: "set",
       openRouterKeyState: "none",
       openRouterModel: "",
+      openRouterKeyEnv: "DOSSIER_OPENROUTER_SCORING_KEY",
     });
   });
 });
@@ -97,6 +104,75 @@ describe("openRouterKey", () => {
     expect(openRouterKey({ openRouterKey: "sk-or", openRouterKeyState: "set", openRouterModel: "openai/gpt-4.1-mini" })).toEqual({
       key: "sk-or",
       model: "openai/gpt-4.1-mini",
+      problem: null,
+    });
+  });
+});
+
+describe("OpenRouter decision scoring config", () => {
+  it("uses the free decision model when none is saved, and ignores OPENROUTER_API_KEY unless asked", () => {
+    expect(resolveScoringConfig(nothingSaved, { OPENROUTER_API_KEY: "sk-or-general" })).toMatchObject({
+      scorer: "AI",
+      openRouterKey: null,
+      openRouterKeyEnv: "DOSSIER_OPENROUTER_SCORING_KEY",
+    });
+    expect(
+      resolveScoringConfig(nothingSaved, {
+        DOSSIER_SCORER: "openrouter-decisions",
+        DOSSIER_OPENROUTER_SCORING_KEY: "sk-or-scoring",
+      }),
+    ).toMatchObject({
+      scorer: "OPENROUTER_DECISIONS",
+      openRouterModel: OPENROUTER_DECISION_MODEL,
+      openRouterKey: "sk-or-scoring",
+      openRouterKeyState: "env",
+      openRouterKeyEnv: "DOSSIER_OPENROUTER_SCORING_KEY",
+    });
+    expect(
+      resolveScoringConfig(nothingSaved, {
+        DOSSIER_SCORER: "openrouter-decisions",
+        DOSSIER_OPENROUTER_SCORING_KEY_SOURCE: "openrouter_api_key",
+        OPENROUTER_API_KEY: "sk-or-general",
+        DOSSIER_OPENROUTER_SCORING_KEY: "sk-or-scoring",
+      }).openRouterKey,
+    ).toBe("sk-or-scoring");
+    expect(
+      resolveScoringConfig(nothingSaved, {
+        DOSSIER_OPENROUTER_SCORING_KEY_SOURCE: "openrouter_api_key",
+        OPENROUTER_API_KEY: "sk-or-general",
+      }),
+    ).toMatchObject({ openRouterKey: "sk-or-general", openRouterKeyEnv: "OPENROUTER_API_KEY", openRouterKeyState: "env" });
+  });
+
+  it("keeps a saved scoring key ahead of the explicit API key fallback", () => {
+    const saved = {
+      scorer: "OPENROUTER_DECISIONS" as const,
+      typesafeKeyEnc: null,
+      openRouterScoringModel: "parallel/decisions-fast:free",
+      openRouterScoringKeyEnc: encryptSecret(OPENROUTER_SCORING_KEY, "sk-or-saved"),
+    };
+    expect(
+      resolveScoringConfig(saved, {
+        DOSSIER_OPENROUTER_SCORING_KEY_SOURCE: "openrouter_api_key",
+        OPENROUTER_API_KEY: "sk-or-general",
+        DOSSIER_OPENROUTER_SCORING_MODEL: OPENROUTER_DECISION_MODEL,
+      }),
+    ).toMatchObject({
+      openRouterKey: "sk-or-saved",
+      openRouterKeyState: "set",
+      openRouterModel: "parallel/decisions-fast:free",
+      openRouterKeyEnv: "DOSSIER_OPENROUTER_SCORING_KEY",
+    });
+  });
+
+  it("replaces a chat model when decision scoring is selected, and keeps a free id", () => {
+    expect(decisionModelOnSelect("openai/gpt-4.1-mini", "OPENROUTER_DECISIONS")).toBe(OPENROUTER_DECISION_MODEL);
+    expect(decisionModelOnSelect(null, "OPENROUTER_DECISIONS")).toBe(OPENROUTER_DECISION_MODEL);
+    expect(decisionModelOnSelect("parallel/decisions-fast:free", "OPENROUTER_DECISIONS")).toBeUndefined();
+    expect(decisionModelOnSelect(null, "OPENROUTER")).toBeUndefined();
+    expect(openRouterDecisionTarget({ openRouterKey: "sk-or", openRouterKeyState: "set", openRouterModel: "" })).toEqual({
+      key: "sk-or",
+      model: OPENROUTER_DECISION_MODEL,
       problem: null,
     });
   });
