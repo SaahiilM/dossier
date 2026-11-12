@@ -11,6 +11,7 @@ import { CASES, type CaseTag, type Fixture, type GoldLabel } from "./fixtures/ca
 import { JEV_WEIGHTS, jevParts, jevQuestions, jevScore, jevState, type JevParts, type JevPosting } from "../src/lib/scoring/jev.ts";
 import { postingLines } from "../src/lib/scoring/posting-lines.ts";
 import type { ProfileData } from "../src/lib/profile.ts";
+import { emptyWorkAuthorization } from "../src/lib/work-authorization.ts";
 
 const contract = JSON.parse(readFileSync(new URL("./contract.json", import.meta.url), "utf8")) as {
   requestModel: string;
@@ -76,13 +77,15 @@ export function modelOutputName(id: string): string {
 export const KEY_VARIABLES = ["OPENROUTER_API_KEY", "DOSSIER_OPENROUTER_SCORING_KEY"] as const;
 export type KeyVariable = (typeof KEY_VARIABLES)[number];
 
+/** Fixed "today" for benchmark fixtures (audit B3); experience math must not drift with wall clock. */
+export const BENCHMARK_REFERENCE_DATE = "2026-11-12T12:00:00.000Z";
+
 export const POLICY = Object.freeze({
   yes: 0.7,
   no: 0.3,
   passScore: 75,
   minRequirements: 0.75,
   maxRequirementsReject: 0.25,
-  minConfidence: 0.7,
   minWork: 0.5,
   minSeniority: 0.5,
   weights: JEV_WEIGHTS,
@@ -138,7 +141,7 @@ export function redactText(text: string, secrets: readonly string[]): { text: st
   return { text: out, removals };
 }
 
-function toProfile(fixture: Fixture): ProfileData {
+export function toProfile(fixture: Fixture): ProfileData {
   const skills = fixture.candidate.skills.map((name, index) => ({ id: `skill-${index + 1}`, name, group: "" }));
   const [year, month] = fixture.candidate.start.split("-").map(Number);
   return {
@@ -187,6 +190,7 @@ function toProfile(fixture: Fixture): ProfileData {
     references: [],
     customSections: [],
     facts: fixture.candidate.facts.map((text, index) => ({ id: `fact-${index + 1}`, text })),
+    workAuthorization: emptyWorkAuthorization(),
   };
 }
 
@@ -202,7 +206,7 @@ export function decisionRequest(fixture: Fixture, modelId = MODEL_ID) {
   const lines = postingLines(posting.description);
   const body = {
     model: modelId,
-    state: jevState(posting, toProfile(fixture)),
+    state: jevState(posting, toProfile(fixture), new Date(BENCHMARK_REFERENCE_DATE)),
     questions: jevQuestions(lines),
     provider: { allow_fallbacks: false },
   };
@@ -249,20 +253,18 @@ export function modelAccepted(returned: string, spec: ModelSpec = defaultModel()
 export function decide(
   parts: JevParts,
   score: number,
-  answers: Record<string, { type?: string; confidence?: number }>,
+  answers: Record<string, { type?: string; confidence?: number; probabilities?: Record<string, number> }>,
 ): Gate {
   const uncertain = (value: number) => value > POLICY.no && value < POLICY.yes;
   if (parts.thin > POLICY.no) return "escalate";
-  if (uncertain(parts.place) || uncertain(parts.language)) return "escalate";
-  if (parts.place >= POLICY.yes || parts.language >= POLICY.yes) return "reject";
+  if (uncertain(parts.location) || uncertain(parts.permit) || uncertain(parts.language)) return "escalate";
+  if (parts.location >= POLICY.yes || parts.permit >= POLICY.yes || parts.language >= POLICY.yes) return "reject";
   const requirements = answers.requirements;
-  const confidence =
-    requirements?.type === "score" && typeof requirements.confidence === "number" ? requirements.confidence : null;
-  if (
-    parts.requirements <= POLICY.maxRequirementsReject &&
-    confidence !== null &&
-    confidence >= POLICY.minConfidence
-  ) {
+  const pReject =
+    requirements?.type === "score" && requirements.probabilities && typeof requirements.probabilities === "object"
+      ? Number((requirements.probabilities as Record<string, number>)["0"] ?? (requirements.probabilities as Record<string, number>)[0])
+      : null;
+  if (parts.requirements <= POLICY.maxRequirementsReject && pReject !== null && !Number.isNaN(pReject) && pReject >= POLICY.yes) {
     return "reject";
   }
   const missingRequired = parts.lines.some((line) => line.kind === "required" && line.shown <= POLICY.no);
@@ -271,7 +273,8 @@ export function decide(
     parts.requirements >= POLICY.minRequirements &&
     parts.work >= POLICY.minWork &&
     parts.seniority >= POLICY.minSeniority &&
-    parts.place <= POLICY.no &&
+    parts.location <= POLICY.no &&
+    parts.permit <= POLICY.no &&
     parts.language <= POLICY.no &&
     parts.thin <= POLICY.no &&
     !missingRequired

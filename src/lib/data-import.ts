@@ -222,6 +222,7 @@ export async function importExport(db: PrismaClient, data: DossierExport): Promi
           ...candidate,
           reasons: json(candidate.reasons),
           redFlags: json(candidate.redFlags),
+          meta: json(candidate.meta),
           applicationId: candidate.applicationId && applicationIds.has(candidate.applicationId) ? candidate.applicationId : null,
         })),
       });

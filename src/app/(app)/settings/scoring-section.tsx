@@ -159,6 +159,14 @@ export function ScoringSection({ initial }: { initial: ScoringView }) {
         ))}
       </RadioGroup.Root>
 
+      <p role="note" className="text-meta text-muted">
+        After you change scorer, saved scores may show as stale until you score again. Check whether your minimum score in{" "}
+        <Link href="/settings?section=agent" className="underline underline-offset-2 hover:text-ink">
+          Settings → Job agent
+        </Link>{" "}
+        still fits this scorer.
+      </p>
+
       {view.scorer === "JEV" && (
         <>
           <p role="note" className="rounded-card bg-warning-surface px-4 py-3 text-meta text-warning">

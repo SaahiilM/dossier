@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
@@ -31,6 +31,8 @@ import {
   splitOf,
   summarize,
   validateCorpus,
+  BENCHMARK_REFERENCE_DATE,
+  toProfile,
   wilson,
 } from "./harness.ts";
 import { JEV_WEIGHTS, jevParts as partsOf, jevScore as scoreOf } from "../src/lib/scoring/jev.ts";
@@ -44,7 +46,8 @@ function answers(lines: { kind: string; shown: number }[], overrides: Record<str
     requirements: score(4),
     work: score(3),
     seniority: score(3),
-    place: noul(0.05),
+    location: noul(0.05),
+    permit: noul(0.05),
     language: noul(0.05),
     thin: noul(0.05),
     ...Object.fromEntries(lines.flatMap((line, index) => [[`line${index}Kind`, choice(line.kind)], [`line${index}Shown`, noul(line.shown)]])),
@@ -95,19 +98,19 @@ describe("policy", () => {
     assert.equal(scoreOf(clearParts), 100);
     assert.equal(decide(clearParts, 100, clear), "pass");
 
-    const blocked = answers([{ kind: "required", shown: 0.9 }], { place: noul(0.9) });
+    const blocked = answers([{ kind: "required", shown: 0.9 }], { location: noul(0.9) });
     const blockedParts = partsOf(blocked, clearLines);
-    assert.equal(scoreOf(blockedParts), 85);
-    assert.equal(decide(blockedParts, 85, blocked), "reject");
+    assert.equal(scoreOf(blockedParts), 69);
+    assert.equal(decide(blockedParts, 69, blocked), "reject");
 
-    const unsure = answers([{ kind: "required", shown: 0.9 }], { place: noul(0.5) });
+    const unsure = answers([{ kind: "required", shown: 0.9 }], { location: noul(0.5) });
     assert.equal(decide(partsOf(unsure, clearLines), 100, unsure), "escalate");
 
-    const thin = answers([{ kind: "required", shown: 0.9 }], { thin: noul(0.8), place: noul(0.95) });
+    const thin = answers([{ kind: "required", shown: 0.9 }], { thin: noul(0.8), location: noul(0.95) });
     assert.equal(decide(partsOf(thin, clearLines), 60, thin), "escalate");
 
     const low = answers([], { requirements: score(0), work: score(0), seniority: score(0) });
-    assert.equal(decide(partsOf(low, []), scoreOf(partsOf(low, [])), low), "reject");
+    assert.equal(decide(partsOf(low, []), scoreOf(partsOf(low, [])), low), "escalate");
 
     const soft = answers([], { requirements: score(0, 0.4), work: score(0), seniority: score(0) });
     assert.equal(decide(partsOf(soft, []), 0, soft), "escalate");
@@ -517,5 +520,27 @@ describe("comparison", () => {
     assert.equal(report.includes("Direct pass:"), true);
     assert.equal(report.includes("Gate recall:"), true);
     assert.equal(report.includes("scenario estimate"), true);
+  });
+});
+
+describe("benchmark corpus hygiene", () => {
+  it("pins a fixed reference date in decision requests (B3)", () => {
+    const { body } = decisionRequest(CASES[0]);
+    const today = (body.state as unknown as { candidate: { today: string } }).candidate.today;
+    assert.equal(today, BENCHMARK_REFERENCE_DATE.slice(0, 10));
+  });
+
+  it("does not use gold-leaking ids in neutral review inputs (B1)", () => {
+    const reviewDir = join(new URL(".", import.meta.url).pathname, "review");
+    const neutral = join(reviewDir, "neutral-cases.json");
+    try {
+      readFileSync(neutral);
+    } catch {
+      return;
+    }
+    const payload = JSON.parse(readFileSync(neutral, "utf8")) as { cases?: { id?: string }[] };
+    for (const row of payload.cases ?? []) {
+      if (typeof row.id === "string") assert.match(row.id, /^(?!e\d|n\d|a\d)/);
+    }
   });
 });

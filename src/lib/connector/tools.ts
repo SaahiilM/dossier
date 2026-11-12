@@ -15,7 +15,7 @@ import { isAiUsable } from "@/lib/ai/config";
 import { profileForPrompt } from "@/lib/ai/tasks/prompt-parts";
 import { scoreFrom } from "@/lib/ai/tasks/score-posting";
 import { unitsSchema } from "@/lib/application-data";
-import { fitBand } from "@/lib/fit";
+import { chatScoreMeta, fitBand, parsePostingFitMeta } from "@/lib/fit";
 import { countryCodeFor, countryName } from "@/lib/job-search/countries";
 import { fullText } from "@/lib/job-search/find";
 import { DEFAULT_RADIUS_KM, foundPostingSchema, POSTED_WITHIN, postingText, RADII_KM, type FoundPosting, type PostedWithin, type SearchQuery, type ShownPosting } from "@/lib/job-search/search";
@@ -23,7 +23,9 @@ import { getJob, startJob } from "@/lib/jobs/runner";
 import { isFrameUnit, PRIVATE_FRAME_UNITS, withFrame, withoutPrivateParts } from "@/lib/letter-frame";
 import { cleanUnitText } from "@/lib/unit-text";
 import { fetchPosting } from "@/lib/posting-fetch";
+import { postingFitFromCandidate } from "@/lib/agent/candidates";
 import { saveScore } from "@/lib/posting-scores";
+import { loadScoringConfig } from "@/lib/scoring/config";
 import { loadSearch, runSearch, showMoreFor } from "@/lib/posting-searches";
 import { foundFromPosting, storePosting } from "@/lib/postings";
 import { prisma } from "@/lib/prisma";
@@ -293,8 +295,9 @@ export function createDossierServer(origin: string): McpServer {
           missing.push(entry.posting_id ?? entry.number ?? "?");
           continue;
         }
-        const fit = scoreFrom({ score: entry.score, reasons: entry.reasons, redFlags: entry.red_flags });
-        await saveScore(posting, fit, WRITTEN_IN_CLAUDE);
+        const scored = scoreFrom({ score: entry.score, reasons: entry.reasons, redFlags: entry.red_flags });
+        const fit = { ...scored, meta: chatScoreMeta(scored) };
+        await saveScore(posting, fit, WRITTEN_IN_CLAUDE, "mcp-manual");
         saved.push({ number: entry.number, posting_id: entry.posting_id, title: posting.title, score: fit.score, band: fitBand(fit.score) });
       }
       return text({ saved, not_found: missing.length > 0 ? missing : undefined, link: linkTo(search_id ? `/jobs?search=${search_id}` : "/jobs?view=saved") });
@@ -630,12 +633,18 @@ export function createDossierServer(origin: string): McpServer {
     async ({ id }) => {
       const candidate = await prisma.agentCandidate.findUnique({ where: { id } });
       if (!candidate || candidate.status === AgentCandidateStatus.DISMISSED) return failure("That posting is no longer in the agent's queue.");
+      const [profile, config] = await Promise.all([loadProfile(), loadScoringConfig()]);
+      const fit = postingFitFromCandidate(candidate, profile, config, new Date());
+      const meta = parsePostingFitMeta(candidate.meta);
       const payload: Record<string, unknown> = {
         id: candidate.id,
         title: candidate.title,
         company: candidate.company,
         place: candidate.place || undefined,
         score: candidate.score,
+        score_stale: fit.stale === true,
+        score_review: meta?.review,
+        auto_draft_blocked: fit.stale === true || meta?.blockAutoDraft === true,
         status: agentStatusLabel(candidate.status),
         reasons: stringsOf(candidate.reasons),
         red_flags: stringsOf(candidate.redFlags),
