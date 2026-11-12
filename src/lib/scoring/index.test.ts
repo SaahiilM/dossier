@@ -20,7 +20,12 @@ vi.mock("@/lib/ai/config", () => ({ isAiConfigured: async () => state.aiReady })
 vi.mock("@/lib/ai", () => ({ getAiProvider: async () => state.provider }));
 vi.mock("@/lib/ai/task-options", () => ({ loadTaskOptions: async () => ({ creativity: "BALANCED", strict: true, language: null }) }));
 vi.mock("@/lib/usage-data", () => ({ recordUsage: vi.fn() }));
-vi.mock("./jev", () => ({ scoreWithJev: vi.fn(async () => ({ data: { score: 80, reasons: ["Covers: Figma"], redFlags: [] }, scoredWith: "score-posting-jev@1 (jev-1.14.0)" })) }));
+vi.mock("./jev", () => ({
+  scoreWithJev: vi.fn(async () => ({
+    data: { score: 80, reasons: ["Covers: Figma"], redFlags: [], meta: { review: "eligible", blockAutoDraft: false } },
+    scoredWith: "score-posting-jev@3 (jev-1.14.0)",
+  })),
+}));
 vi.mock("./openrouter", () => ({
   scoreWithOpenRouter: vi.fn(async () => ({
     data: { score: 76, reasons: ["Knows Figma."], redFlags: [] },
@@ -29,8 +34,8 @@ vi.mock("./openrouter", () => ({
 }));
 vi.mock("./openrouter-decisions", () => ({
   scoreWithOpenRouterDecisions: vi.fn(async () => ({
-    data: { score: 81, reasons: ["Covers: Figma"], redFlags: [] },
-    scoredWith: "score-posting-openrouter-decisions@1 (perplexity/pplx-decider-v1.3-20261112) costUsd=0",
+    data: { score: 81, reasons: ["Covers: Figma"], redFlags: [], meta: { review: "eligible", blockAutoDraft: false } },
+    scoredWith: "score-posting-openrouter-decisions@3 (perplexity/pplx-decider-v1.3-20261112) costUsd=0",
   })),
 }));
 
@@ -79,7 +84,10 @@ describe("loadPostingScorer", () => {
     state.config = { scorer: "JEV", saved: true, key: "ts", keyState: "set", openRouterModel: "", openRouterKey: null, openRouterKeyState: "none", openRouterKeyEnv: "DOSSIER_OPENROUTER_SCORING_KEY" };
     state.aiReady = false;
     const score = await loadPostingScorer();
-    expect(await score(posting, profile, signal)).toEqual({ data: { score: 80, reasons: ["Covers: Figma"], redFlags: [] }, scoredWith: "score-posting-jev@1 (jev-1.14.0)" });
+    expect(await score(posting, profile, signal)).toEqual({
+      data: { score: 80, reasons: ["Covers: Figma"], redFlags: [], meta: { review: "eligible", blockAutoDraft: false } },
+      scoredWith: "score-posting-jev@3 (jev-1.14.0)",
+    });
     // Jev's tokens go to the Usage screen (#290).
     expect(scoreWithJev).toHaveBeenCalledWith(posting, profile, { key: "ts", signal, onUsage: recordUsage });
   });
@@ -88,7 +96,10 @@ describe("loadPostingScorer", () => {
     const provider = new MockProvider({ reply: () => ({ score: 72, reasons: ["Knows Figma."], redFlags: [] }) });
     state.provider = provider;
     const score = await loadPostingScorer();
-    expect(await score(posting, profile, signal)).toEqual({ data: { score: 72, reasons: ["Knows Figma."], redFlags: [] }, scoredWith: "score-posting@2" });
+    expect(await score(posting, profile, signal)).toEqual({
+      data: { score: 72, reasons: ["Knows Figma."], redFlags: [], meta: { review: "eligible", blockAutoDraft: false } },
+      scoredWith: "score-posting@2",
+    });
     expect(provider.calls[0].messages[0].content).toContain("Ledgerly: Designer");
     expect(scoreWithJev).not.toHaveBeenCalled();
   });
@@ -111,7 +122,7 @@ describe("loadPostingScorer", () => {
     state.aiReady = false;
     const orScore = await loadPostingScorer();
     expect(await orScore(posting, profile, signal)).toEqual({
-      data: { score: 76, reasons: ["Knows Figma."], redFlags: [] },
+      data: { score: 76, reasons: ["Knows Figma."], redFlags: [], meta: { review: "eligible", blockAutoDraft: false } },
       scoredWith: "score-posting-openrouter@1 (openai/gpt-4.1-mini)",
     });
     expect(scoreWithOpenRouter).toHaveBeenCalledWith(posting, profile, expect.objectContaining({ key: "sk-or", model: "openai/gpt-4.1-mini", onUsage: recordUsage }));
@@ -130,8 +141,8 @@ describe("loadPostingScorer", () => {
     state.aiReady = false;
     const score = await loadPostingScorer();
     expect(await score(posting, profile, signal)).toEqual({
-      data: { score: 81, reasons: ["Covers: Figma"], redFlags: [] },
-      scoredWith: "score-posting-openrouter-decisions@1 (perplexity/pplx-decider-v1.3-20261112) costUsd=0",
+      data: { score: 81, reasons: ["Covers: Figma"], redFlags: [], meta: { review: "eligible", blockAutoDraft: false } },
+      scoredWith: "score-posting-openrouter-decisions@3 (perplexity/pplx-decider-v1.3-20261112) costUsd=0",
     });
     expect(scoreWithOpenRouterDecisions).toHaveBeenCalledWith(
       posting,

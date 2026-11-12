@@ -5,12 +5,13 @@ import { isAiConfigured } from "@/lib/ai/config";
 import { AiError } from "@/lib/ai/errors";
 import { loadTaskOptions } from "@/lib/ai/task-options";
 import { scorePosting } from "@/lib/ai/tasks";
-import type { PostingFit } from "@/lib/fit";
+import { chatScoreMeta, type PostingFit } from "@/lib/fit";
 import { postingText, type FoundPosting } from "@/lib/job-search/search";
 import type { ProfileData } from "@/lib/profile";
 import { recordUsage } from "@/lib/usage-data";
 
 import { jevKey, loadScoringConfig, openRouterDecisionTarget, openRouterKey, type ScoringConfig } from "./config";
+export { postingContentHash, scoreInputFingerprint, scorerPolicyVersion } from "./fingerprint";
 import { scoreWithJev } from "./jev";
 import { scoreWithOpenRouter } from "./openrouter";
 import { scoreWithOpenRouterDecisions } from "./openrouter-decisions";
@@ -59,13 +60,18 @@ export async function loadPostingScorer(): Promise<PostingScorer> {
     if (judge.problem !== null) throw AiError.config(judge.problem);
     const { key, model } = judge;
     const timeoutMs = 120_000;
-    return (posting, profile, signal) => scoreWithOpenRouter(posting, profile, { key, model, timeoutMs, signal, onUsage: recordUsage });
+    return async (posting, profile, signal) => {
+      const { data, scoredWith } = await scoreWithOpenRouter(posting, profile, { key, model, timeoutMs, signal, onUsage: recordUsage });
+      const fit: PostingFit = { ...data, meta: chatScoreMeta(data) };
+      return { data: fit, scoredWith };
+    };
   }
   if (!(await isAiConfigured())) throw AiError.config(AI_PROVIDER_MISSING);
   const [provider, options] = await Promise.all([getAiProvider(), loadTaskOptions()]);
   return async (posting, profile, signal) => {
     const { title, company, place, remote, salary } = posting;
     const { data, promptVersion } = await scorePosting(provider, { posting: postingText(posting), title, company, place, remote, salary, profile }, { ...options, signal });
-    return { data, scoredWith: promptVersion };
+    const fit: PostingFit = { ...data, meta: chatScoreMeta(data) };
+    return { data: fit, scoredWith: promptVersion };
   };
 }
