@@ -15,7 +15,8 @@
     "test:e2e": "playwright test",
     "hash-password": "tsx scripts/hash-password.ts",
     "generate": "prisma generate && prisma generate --schema prisma/sqlite/schema.prisma",
-    "sqlite-schema": "tsx prisma/sqlite/derive.ts"
+    "sqlite-schema": "tsx prisma/sqlite/derive.ts",
+    "build:desktop-seed": "node scripts/build-desktop-seed.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.3.0",
