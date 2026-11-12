@@ -311,7 +311,7 @@ describe("runAgentScan (E16-3)", () => {
     expect(candidates.map((candidate) => [candidate.externalId, candidate.score])).toEqual([["a", 100], ["b", 100], ["c", 0]]);
     expect(candidates[0].reasons).toContain("Covers: Senior Product Designer at Company a.");
     expect(candidates[2].redFlags).toEqual(["The role's level is far from your experience.", "Missing: Office Manager at Company c."]);
-    expect((await prisma().postingScore.findFirstOrThrow({ where: { externalId: "a" } })).scoredWith).toBe("score-posting-jev@2 (jev-1.14.0)");
+    expect((await prisma().postingScore.findFirstOrThrow({ where: { externalId: "a" } })).scoredWith).toBe("score-posting-jev@3 (jev-1.14.0)");
   });
 
   it("does not auto-draft when structured eligibility blocks it, even above the minimum score", async () => {
