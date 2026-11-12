@@ -311,7 +311,31 @@ describe("runAgentScan (E16-3)", () => {
     expect(candidates.map((candidate) => [candidate.externalId, candidate.score])).toEqual([["a", 100], ["b", 100], ["c", 0]]);
     expect(candidates[0].reasons).toContain("Covers: Senior Product Designer at Company a.");
     expect(candidates[2].redFlags).toEqual(["The role's level is far from your experience.", "Missing: Office Manager at Company c."]);
-    expect((await prisma().postingScore.findFirstOrThrow({ where: { externalId: "a" } })).scoredWith).toBe("score-posting-jev@1 (jev-1.14.0)");
+    expect((await prisma().postingScore.findFirstOrThrow({ where: { externalId: "a" } })).scoredWith).toBe("score-posting-jev@2 (jev-1.14.0)");
+  });
+
+  it("does not auto-draft when structured eligibility blocks it, even above the minimum score", async () => {
+    const { startJob } = await import("@/lib/jobs/runner");
+    vi.mocked(startJob).mockClear();
+    fake.ai = false;
+    await saveSettings({ scorer: "JEV", typesafeKeyEnc: encryptSecret(TYPESAFE_KEY, "ts_secret"), agentAutoDraft: true, agentMaxDrafts: 1, agentMinScore: 60 });
+    fake.postings = [page[0]];
+    stubFetch(({ body }) => {
+      const { questions, state } = body as { questions: Record<string, { type: string; criteria?: unknown[] }>; state: { posting: { title: string } } };
+      const answer = (id: string, question: { type: string; criteria?: unknown[] }) =>
+        question.type === "score"
+          ? { type: "score", score: question.criteria!.length - 1, confidence: 0.9, probabilities: {} }
+          : question.type === "choice"
+            ? { type: "choice", choice: id.includes("Kind") ? "required" : "required", confidence: 0.9, probabilities: { required: 0.95, preferred: 0.02, other: 0.03 } }
+            : { type: "noul", noul: id.endsWith("Shown") ? 0.05 : 0.05 };
+      return json({ model: "jev-1.14.0", answers: Object.fromEntries(Object.entries(questions).map(([id, question]) => [id, answer(id, question)])) });
+    });
+    const result = await runAgentScan({ manual: false }, context(), now);
+    vi.unstubAllGlobals();
+    expect(result).toMatchObject({ scored: 1, drafted: 0 });
+    expect(startJob).not.toHaveBeenCalled();
+    const candidate = await prisma().agentCandidate.findFirstOrThrow();
+    expect(candidate.score).toBeLessThan(70);
   });
 
   it("scores the newest new postings first, up to the cap", async () => {
