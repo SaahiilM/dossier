@@ -4,18 +4,29 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { AiSettingsView } from "@/lib/ai/provider-options";
 
-import { listAiModels, saveAiProvider, saveApiKey, testAiConnection } from "./actions";
+import { listAiModels, saveAiProvider, saveApiKey, saveChatGptAccountSub, testAiConnection } from "./actions";
 import { AiProviderSection } from "./ai-provider-section";
+
+vi.mock("./subscription-provider-section", () => ({
+  SubscriptionProviderSection: () => <div data-testid="subscription-provider" />,
+}));
 
 vi.mock("./actions", () => ({
   saveAiProvider: vi.fn(),
   saveApiKey: vi.fn(),
+  saveChatGptAccountSub: vi.fn(),
   listAiModels: vi.fn(),
   testAiConnection: vi.fn(),
 }));
 vi.mock("@/components/toast", () => ({ toast: vi.fn(), toastResult: (result: unknown) => result }));
 
-const local: AiSettingsView = { provider: "LOCAL", baseUrl: "http://ollama:11434", model: "qwen2.5:3b", keyState: "none" };
+const local: AiSettingsView = {
+  provider: "LOCAL",
+  baseUrl: "http://ollama:11434",
+  model: "qwen2.5:3b",
+  keyState: "none",
+  chatGptAccountSub: "",
+};
 
 beforeEach(() => {
   vi.mocked(saveAiProvider).mockReset().mockResolvedValue({ ok: true, data: { keyState: "none" } });
@@ -34,6 +45,9 @@ describe("AiProviderSection", () => {
       "OpenAI-compatible",
       "Anthropic",
       "Mistral",
+      "OpenRouter",
+      "ChatGPT plan",
+      "Claude Code",
     ]);
     expect(screen.getByRole("radio", { name: "Local model" })).toBeChecked();
     expect(screen.getByLabelText("Server address")).toHaveValue("http://ollama:11434");

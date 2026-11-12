@@ -91,6 +91,8 @@ export function AgentSection({
         <SetupNote before="The agent searches the source you choose in " section="jobs" after=", which is off. Choose one first." />
       ) : scoring.ready ? null : scoring.scorer === "JEV" ? (
         <SetupNote before="The agent scores postings with Jev, which needs your TypeSafe key in " section="scoring" after="." />
+      ) : scoring.scorer === "OPENROUTER" ? (
+        <SetupNote before="The agent scores postings with OpenRouter, which needs your judging key and model in " section="scoring" after="." />
       ) : (
         <SetupNote before="The agent scores postings with the AI provider in " section="ai" after=", which isn't set up yet. Choose one first." />
       )}

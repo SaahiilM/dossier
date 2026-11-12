@@ -8,7 +8,7 @@ import { createTestClient, resetDatabase } from "@/test/db";
 import { seedBuiltIns } from "../../../../prisma/seed/built-ins";
 
 import { json, stubFetch } from "@/lib/ai/test-http";
-import { decryptSecret, JOB_SOURCE_KEY, TYPESAFE_KEY } from "@/lib/secrets";
+import { decryptSecret, JOB_SOURCE_KEY, OPENROUTER_SCORING_KEY, TYPESAFE_KEY } from "@/lib/secrets";
 import { clearJobSearchCache } from "@/lib/job-search/cache";
 import { jsearchV2LastPage } from "@/test/job-search-fixtures";
 
@@ -23,6 +23,8 @@ import {
   saveJobSearchDetails,
   saveJobSource,
   saveJobSourceKey,
+  saveOpenRouterScoringKey,
+  saveOpenRouterScoringModel,
   saveScorer,
   saveTypesafeKey,
   setConnector,
@@ -240,17 +242,31 @@ describe("job search settings (E14-4)", () => {
 
 describe("scoring settings (#274)", () => {
   it("saves the scorer, and the TypeSafe key encrypted for it only", async () => {
-    expect(await saveScorer({ scorer: "JEV" })).toEqual({ ok: true, data: { scorer: "JEV", keyState: "none" } });
-    expect(await saveTypesafeKey({ change: { action: "set", value: " ts_secret " } })).toEqual({ ok: true, data: { scorer: "JEV", keyState: "set" } });
+    expect(await saveScorer({ scorer: "JEV" })).toMatchObject({
+      ok: true,
+      data: { scorer: "JEV", keyState: "none", openRouterKeyState: "none", openRouterModel: "" },
+    });
+    expect(await saveTypesafeKey({ change: { action: "set", value: " ts_secret " } })).toMatchObject({ ok: true, data: { scorer: "JEV", keyState: "set" } });
     const saved = await settings();
     expect(saved.scorer).toBe("JEV");
     expect(saved.typesafeKeyEnc).not.toContain("ts_secret");
     expect(decryptSecret(TYPESAFE_KEY, saved.typesafeKeyEnc!)).toBe("ts_secret");
     expect(() => decryptSecret(JOB_SOURCE_KEY, saved.typesafeKeyEnc!)).toThrow();
 
-    expect(await saveTypesafeKey({ change: { action: "clear" } })).toEqual({ ok: true, data: { scorer: "JEV", keyState: "none" } });
+    expect(await saveTypesafeKey({ change: { action: "clear" } })).toMatchObject({ ok: true, data: { scorer: "JEV", keyState: "none" } });
     expect((await settings()).typesafeKeyEnc).toBeNull();
     expect(await saveScorer({ scorer: "AI" })).toMatchObject({ ok: true, data: { scorer: "AI" } });
+  });
+
+  it("saves OpenRouter judging credentials separately from TypeSafe and the AI key", async () => {
+    await saveScorer({ scorer: "OPENROUTER" });
+    await saveOpenRouterScoringModel({ model: "openai/gpt-4.1-mini" });
+    await saveOpenRouterScoringKey({ change: { action: "set", value: " sk-or_secret " } });
+    const saved = await settings();
+    expect(saved.scorer).toBe("OPENROUTER");
+    expect(saved.openRouterScoringModel).toBe("openai/gpt-4.1-mini");
+    expect(decryptSecret(OPENROUTER_SCORING_KEY, saved.openRouterScoringKeyEnc!)).toBe("sk-or_secret");
+    expect(() => decryptSecret(TYPESAFE_KEY, saved.openRouterScoringKeyEnc!)).toThrow();
   });
 
   it("tests Jev with the saved key, with one short question", async () => {

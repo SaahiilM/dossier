@@ -9,7 +9,8 @@ import { action, ActionError } from "@/lib/action";
 import { lockAgentSearches } from "@/lib/agent/searches";
 import { AiError, createProvider } from "@/lib/ai";
 import { applyApiKeyChange } from "@/lib/ai/api-key";
-import { keyStateOf, loadAiConfig, resolveAiConfig } from "@/lib/ai/config";
+import { keyStateOf, loadAiConfig, PROVIDER_DEFAULTS, resolveAiConfig } from "@/lib/ai/config";
+import { OpenAICompatibleProvider } from "@/lib/ai/providers/openai-compatible";
 import type { KeyState } from "@/lib/ai/provider-options";
 import { DOCUMENT_LANGUAGES } from "@/lib/document-language";
 import { deleteAllBackups } from "@/lib/backups";
@@ -23,10 +24,10 @@ import { redirectProblem } from "@/lib/connector/oauth";
 import { countTailoredDocuments, deleteAllDownloads, zipPdfsJob } from "@/lib/jobs/zip-pdfs";
 import { disconnectGoogle } from "@/lib/google/account";
 import { prisma } from "@/lib/prisma";
-import { jevKey, loadScoringConfig, scoringView } from "@/lib/scoring/config";
+import { jevKey, loadScoringConfig, openRouterKey, scoringView } from "@/lib/scoring/config";
 import { SCORERS } from "@/lib/scoring/scorers";
 import { askJev } from "@/lib/scoring/typesafe";
-import { applySecretChange, JOB_SOURCE_KEY, TYPESAFE_KEY } from "@/lib/secrets";
+import { applySecretChange, JOB_SOURCE_KEY, OPENROUTER_SCORING_KEY, TYPESAFE_KEY } from "@/lib/secrets";
 
 import { seedBuiltIns } from "../../../../prisma/seed/built-ins";
 import { DOCUMENTS_TO_WRITE, isJobRetention } from "@/lib/settings";
@@ -62,6 +63,15 @@ export const saveAiProvider = action(
       ...(current.provider !== provider ? { apiKeyEnc: null } : {}),
     });
     return { keyState: await currentKeyState() };
+  },
+);
+
+/** Saves which ChatGPT SIWC account models and completions use. */
+export const saveChatGptAccountSub = action(
+  z.object({ sub: z.string().trim().min(1).max(200) }),
+  async ({ sub }) => {
+    await saveSettings({ chatGptAccountSub: sub });
+    return null;
   },
 );
 
@@ -202,6 +212,67 @@ export const saveTypesafeKey = action(
 );
 
 /** "Test connection": one yes-or-no question to Jev about a sentence, timed. It costs a few dozen tokens. */
+/** Saves the OpenRouter judging model; the key is separate. */
+export const saveOpenRouterScoringModel = action(z.object({ model: z.string().trim().max(200) }), async ({ model }) => {
+  await saveSettings({ openRouterScoringModel: model || null });
+  return loadScoringView();
+});
+
+/** Saves the OpenRouter judging key, encrypted for it only, or removes it. */
+export const saveOpenRouterScoringKey = action(
+  z.object({
+    change: z.discriminatedUnion("action", [
+      z.object({ action: z.literal("set"), value: z.string().trim().min(1).max(1000) }),
+      z.object({ action: z.literal("clear") }),
+    ]),
+  }),
+  async ({ change }) => {
+    const current = await loadSettings();
+    await saveSettings({ openRouterScoringKeyEnc: applySecretChange(OPENROUTER_SCORING_KEY, current.openRouterScoringKeyEnc, change) });
+    return loadScoringView();
+  },
+);
+
+/** Models OpenRouter offers for judging, when the key and model settings allow listing. */
+export const listOpenRouterScoringModels = action(z.object({}), async () => {
+  const judge = openRouterKey(await loadScoringConfig());
+  if (judge.problem !== null) return { models: [] as string[], problem: judge.problem };
+  try {
+    const provider = new OpenAICompatibleProvider(
+      "OPENROUTER",
+      PROVIDER_DEFAULTS[AiProvider.OPENROUTER].baseUrl,
+      judge.key,
+      judge.model,
+      PROVIDER_DEFAULTS[AiProvider.OPENROUTER].timeoutSeconds * 1000,
+    );
+    return { models: await provider.listModels(AbortSignal.timeout(15_000)), problem: null };
+  } catch (error) {
+    if (error instanceof AiError) return { models: [], problem: error.message };
+    throw error;
+  }
+});
+
+/** "Test connection": a short prompt through the judging model, timed. */
+export const testOpenRouterScoring = action(z.object({}), async () => {
+  const judge = openRouterKey(await loadScoringConfig());
+  if (judge.problem !== null) return { connected: false as const, message: judge.problem };
+  const started = performance.now();
+  try {
+    const provider = new OpenAICompatibleProvider(
+      "OPENROUTER",
+      PROVIDER_DEFAULTS[AiProvider.OPENROUTER].baseUrl,
+      judge.key,
+      judge.model,
+      Math.min(PROVIDER_DEFAULTS[AiProvider.OPENROUTER].timeoutSeconds * 1000, TEST_TIMEOUT_MS),
+    );
+    const { model, latencyMs } = await provider.test();
+    return { connected: true as const, model, seconds: Math.round(latencyMs / 100) / 10 };
+  } catch (error) {
+    if (error instanceof AiError) return { connected: false as const, message: error.message };
+    throw error;
+  }
+});
+
 export const testJev = action(z.object({}), async () => {
   const jev = jevKey(await loadScoringConfig());
   if (jev.problem !== null) return { connected: false as const, message: jev.problem };
