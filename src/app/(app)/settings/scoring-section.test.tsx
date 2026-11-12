@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { ScoringView } from "@/lib/scoring/scorers";
 
-import { saveScorer, saveTypesafeKey, testJev } from "./actions";
+import { saveScorer, saveTypesafeKey, testJev, testOpenRouterDecisions } from "./actions";
 import { ScoringSection } from "./scoring-section";
 
 vi.mock("./actions", () => ({
@@ -12,9 +12,11 @@ vi.mock("./actions", () => ({
   saveTypesafeKey: vi.fn(),
   testJev: vi.fn(),
   listOpenRouterScoringModels: vi.fn(async () => ({ ok: true, data: { models: [], problem: null } })),
+  listOpenRouterDecisionModels: vi.fn(async () => ({ ok: true, data: { models: ["perplexity/pplx-decider-v1.3:free"], problem: null } })),
   saveOpenRouterScoringKey: vi.fn(),
   saveOpenRouterScoringModel: vi.fn(),
   testOpenRouterScoring: vi.fn(),
+  testOpenRouterDecisions: vi.fn(),
 }));
 vi.mock("@/hooks/use-autosave", () => ({
   useAutosave: () => ({ status: "idle" as const, savedAt: null, flush: () => {} }),
@@ -43,7 +45,8 @@ describe("ScoringSection (#274)", () => {
     expect(screen.getAllByRole("radio").map((radio) => radio.getAttribute("aria-label"))).toEqual([
       "Your AI model",
       "Jev by TypeSafe",
-      "OpenRouter model",
+      "OpenRouter decision model",
+      "OpenRouter chat model",
     ]);
     expect(screen.getByRole("radio", { name: "Your AI model" })).toBeChecked();
     expect(screen.queryByRole("note")).not.toBeInTheDocument();
@@ -99,5 +102,19 @@ describe("ScoringSection (#274)", () => {
     await userEvent.click(screen.getByRole("radio", { name: "Your AI model" }));
     expect(saveScorer).toHaveBeenCalledWith({ scorer: "AI" });
     expect(screen.queryByLabelText("TypeSafe key")).not.toBeInTheDocument();
+  });
+
+  it("offers the OpenRouter decision model and tests it on the decision protocol", async () => {
+    vi.mocked(testOpenRouterDecisions).mockResolvedValue({
+      ok: true,
+      data: { connected: true, model: "perplexity/pplx-decider-v1.3-20261112", seconds: 0.2 },
+    });
+    render(<ScoringSection initial={{ scorer: "OPENROUTER_DECISIONS", keyState: "none", openRouterKeyState: "set", openRouterModel: "perplexity/pplx-decider-v1.3:free" }} />);
+    expect(screen.getByRole("radio", { name: "OpenRouter decision model" })).toBeChecked();
+    expect(await screen.findByRole("option", { name: "perplexity/pplx-decider-v1.3:free" })).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("one short decision question");
+    await userEvent.click(screen.getByRole("button", { name: "Test connection" }));
+    expect(testOpenRouterDecisions).toHaveBeenCalledWith({});
+    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Connected · perplexity/pplx-decider-v1.3-20261112 answered in 0.2 s"));
   });
 });

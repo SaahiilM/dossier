@@ -161,6 +161,7 @@ export default async function WelcomePage({ searchParams }: PageProps<"/welcome"
         complete={
           view.scorer === "AI" ||
           (view.scorer === "JEV" && (view.keyState === "set" || view.keyState === "env")) ||
+          (view.scorer === "OPENROUTER_DECISIONS" && (view.openRouterKeyState === "set" || view.openRouterKeyState === "env")) ||
           (view.scorer === "OPENROUTER" &&
             Boolean(view.openRouterModel.trim()) &&
             (view.openRouterKeyState === "set" || view.openRouterKeyState === "env"))

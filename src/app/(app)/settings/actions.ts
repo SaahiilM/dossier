@@ -24,8 +24,9 @@ import { redirectProblem } from "@/lib/connector/oauth";
 import { countTailoredDocuments, deleteAllDownloads, zipPdfsJob } from "@/lib/jobs/zip-pdfs";
 import { disconnectGoogle } from "@/lib/google/account";
 import { prisma } from "@/lib/prisma";
-import { jevKey, loadScoringConfig, openRouterKey, scoringView } from "@/lib/scoring/config";
-import { SCORERS } from "@/lib/scoring/scorers";
+import { jevKey, loadScoringConfig, openRouterDecisionTarget, openRouterKey, scoringView } from "@/lib/scoring/config";
+import { DECISION_CATALOG_EMPTY, knownFreeDecisionModelIds, listFreeDecisionModelIds, probeOpenRouterDecision } from "@/lib/scoring/openrouter-decisions";
+import { decisionModelOnSelect, SCORERS } from "@/lib/scoring/scorers";
 import { askJev } from "@/lib/scoring/typesafe";
 import { applySecretChange, JOB_SOURCE_KEY, OPENROUTER_SCORING_KEY, TYPESAFE_KEY } from "@/lib/secrets";
 
@@ -190,9 +191,11 @@ export const testJobSource = action(z.object({}), async () => {
 
 const loadScoringView = async () => scoringView(await loadScoringConfig());
 
-/** What scores postings: the AI model, or Jev. */
+/** What scores postings: the AI model, Jev, an OpenRouter decision model, or an OpenRouter chat model. */
 export const saveScorer = action(z.object({ scorer: z.enum(SCORERS) }), async ({ scorer }) => {
-  await saveSettings({ scorer });
+  const current = await loadSettings();
+  const model = decisionModelOnSelect(current.openRouterScoringModel, scorer);
+  await saveSettings(model === undefined ? { scorer } : { scorer, openRouterScoringModel: model });
   return loadScoringView();
 });
 
@@ -252,7 +255,33 @@ export const listOpenRouterScoringModels = action(z.object({}), async () => {
   }
 });
 
-/** "Test connection": a short prompt through the judging model, timed. */
+/** Free decision models from OpenRouter's decisions catalog, not the chat catalog. */
+export const listOpenRouterDecisionModels = action(z.object({}), async () => {
+  try {
+    const models = await listFreeDecisionModelIds();
+    if (models.length === 0) return { models: knownFreeDecisionModelIds(), problem: DECISION_CATALOG_EMPTY };
+    return { models, problem: null as string | null };
+  } catch (error) {
+    if (error instanceof AiError) return { models: knownFreeDecisionModelIds(), problem: error.message };
+    throw error;
+  }
+});
+
+/** "Test connection": one short question on the decisions endpoint, timed. */
+export const testOpenRouterDecisions = action(z.object({}), async () => {
+  const decision = openRouterDecisionTarget(await loadScoringConfig());
+  if (decision.problem !== null) return { connected: false as const, message: decision.problem };
+  const started = performance.now();
+  try {
+    const result = await probeOpenRouterDecision(decision.key, decision.model, { timeoutMs: TEST_TIMEOUT_MS });
+    return { connected: true as const, model: result.model, seconds: Math.round((performance.now() - started) / 100) / 10 };
+  } catch (error) {
+    if (error instanceof AiError) return { connected: false as const, message: error.message };
+    throw error;
+  }
+});
+
+/** "Test connection": a short prompt through the judging chat model, timed. */
 export const testOpenRouterScoring = action(z.object({}), async () => {
   const judge = openRouterKey(await loadScoringConfig());
   if (judge.problem !== null) return { connected: false as const, message: judge.problem };

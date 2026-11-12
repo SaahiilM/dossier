@@ -10,6 +10,7 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import {
+  OPENROUTER_DECISION_MODEL,
   OPENROUTER_KEYS_URL,
   SCORER_INFO,
   TYPESAFE_KEY_URL,
@@ -19,12 +20,14 @@ import {
 import { WIKI } from "@/lib/setup/instructions";
 
 import {
+  listOpenRouterDecisionModels,
   listOpenRouterScoringModels,
   saveOpenRouterScoringKey,
   saveOpenRouterScoringModel,
   saveScorer,
   saveTypesafeKey,
   testJev,
+  testOpenRouterDecisions,
   testOpenRouterScoring,
 } from "../../(app)/settings/actions";
 import { ChoiceCards } from "./choice-cards";
@@ -48,10 +51,16 @@ const OPTIONS: readonly { value: Scorer; name: string; description: string; tag:
     tag: "Needs a TypeSafe key · in early access",
   },
   {
+    value: "OPENROUTER_DECISIONS",
+    name: "OpenRouter decision model",
+    description: "A free decision model answers the same questions as Jev. Dossier builds the score from those answers and quotes the posting. It writes no prose.",
+    tag: `Default ${OPENROUTER_DECISION_MODEL}`,
+  },
+  {
     value: "OPENROUTER",
-    name: "OpenRouter model",
-    description: "A separate OpenRouter key and model judge postings. Your writing AI stays unchanged.",
-    tag: "Needs an OpenRouter key and judging model",
+    name: "OpenRouter chat model",
+    description: "A separate OpenRouter key and chat model judge postings and write the explanation. Your writing AI stays unchanged.",
+    tag: "Needs an OpenRouter key and a chat model",
   },
 ];
 
@@ -59,7 +68,7 @@ const OTHER_MODEL = "__other";
 
 /**
  * The guide's scoring step (E21-4): Score in Find jobs and the job agent use
- * your AI unless you choose Jev or OpenRouter, which come with their own setup.
+ * your AI unless you choose Jev or an OpenRouter scorer, which come with their own setup.
  */
 export function ScoringStep({ initial }: { initial: ScoringView }) {
   const router = useRouter();
@@ -67,25 +76,39 @@ export function ScoringStep({ initial }: { initial: ScoringView }) {
   const [key, setKey] = useState("");
   const [openRouterModel, setOpenRouterModel] = useState(initial.openRouterModel);
   const [otherOpenRouterModel, setOtherOpenRouterModel] = useState(false);
-  const [modelList, setModelList] = useState<ModelList>({ loading: false, models: [], problem: null });
+  const [modelList, setModelList] = useState<ModelList>(
+    initial.scorer === "OPENROUTER" || initial.scorer === "OPENROUTER_DECISIONS" ? { loading: true } : { loading: false, models: [], problem: null },
+  );
   const [status, setStatus] = useState<Status>({ state: "idle" });
 
-  const reloadOpenRouterModels = () => {
+  const reloadOpenRouterModels = (next: Scorer = scorer) => {
+    if (next !== "OPENROUTER" && next !== "OPENROUTER_DECISIONS") return;
     setModelList({ loading: true });
-    void listOpenRouterScoringModels({}).then((result) => {
+    const list = next === "OPENROUTER_DECISIONS" ? listOpenRouterDecisionModels({}) : listOpenRouterScoringModels({});
+    void list.then((result) => {
       if (result.ok) setModelList({ loading: false, models: result.data.models, problem: result.data.problem });
       else setModelList({ loading: false, models: [], problem: result.error });
     });
   };
 
   useEffect(() => {
-    if (scorer !== "OPENROUTER") return;
-    reloadOpenRouterModels();
+    if (scorer !== "OPENROUTER" && scorer !== "OPENROUTER_DECISIONS") return;
+    let cancel = false;
+    const list = scorer === "OPENROUTER_DECISIONS" ? listOpenRouterDecisionModels({}) : listOpenRouterScoringModels({});
+    void list.then((result) => {
+      if (cancel) return;
+      if (result.ok) setModelList({ loading: false, models: result.data.models, problem: result.data.problem });
+      else setModelList({ loading: false, models: [], problem: result.error });
+    });
+    return () => {
+      cancel = true;
+    };
   }, [scorer]);
 
   const choose = async (next: Scorer) => {
     setScorer(next);
     setStatus({ state: "idle" });
+    if (next === "OPENROUTER" || next === "OPENROUTER_DECISIONS") setModelList({ loading: true });
     if (toastResult(await saveScorer({ scorer: next })).ok) router.refresh();
   };
 
@@ -114,9 +137,9 @@ export function ScoringStep({ initial }: { initial: ScoringView }) {
     if (toastResult(await saveOpenRouterScoringModel({ model })).ok) router.refresh();
   };
 
-  const checkOpenRouter = async () => {
+  const checkOpenRouter = async (decisions: boolean) => {
     setStatus({ state: "checking" });
-    const result = toastResult(await testOpenRouterScoring({}));
+    const result = toastResult(await (decisions ? testOpenRouterDecisions({}) : testOpenRouterScoring({})));
     if (!result.ok) return setStatus({ state: "idle" });
     if (!result.data.connected) return setStatus({ state: "failed", message: result.data.message });
     setStatus({ state: "connected" });
@@ -176,6 +199,84 @@ export function ScoringStep({ initial }: { initial: ScoringView }) {
           </a>
         </Card>
       )}
+      {scorer === "OPENROUTER_DECISIONS" && (
+        <Card className="flex flex-col gap-6">
+          <dl className="grid gap-x-6 gap-y-3 text-sm sm:grid-cols-[140px_1fr]">
+            <dt className="font-medium">What it costs</dt>
+            <dd className="text-pretty text-muted">
+              The default model is free. This key is only for scoring. A paid decision model is refused.
+            </dd>
+            <dt className="font-medium">Your data</dt>
+            <dd className="text-pretty text-muted">{SCORER_INFO.OPENROUTER_DECISIONS.description}</dd>
+          </dl>
+          <InstructionList
+            label="Setting up the OpenRouter decision model"
+            steps={[
+              { text: "Sign up or sign in on OpenRouter.", link: { href: "https://openrouter.ai/", label: "OpenRouter" } },
+              { text: "Create a key. Credit is not required for the free decision model.", link: { href: OPENROUTER_KEYS_URL, label: "OpenRouter's keys" } },
+              { text: "Paste the key below, keep the default model, and check it." },
+            ]}
+          />
+          <KeyField
+            label="OpenRouter key for scoring"
+            keyState={initial.openRouterKeyState}
+            envName={initial.openRouterKeyEnv ?? "DOSSIER_OPENROUTER_SCORING_KEY"}
+            getKey={{ href: OPENROUTER_KEYS_URL, text: "OpenRouter" }}
+            onSave={saveOpenRouterKeyField}
+          />
+          <Select
+            label="Decision model"
+            value={openRouterSelectValue}
+            onChange={(event) => {
+              const value = event.target.value;
+              if (value === OTHER_MODEL) {
+                setOtherOpenRouterModel(true);
+                return;
+              }
+              setOtherOpenRouterModel(false);
+              void saveOpenRouterModel(value);
+            }}
+            disabled={modelList.loading}
+            hint={!modelList.loading ? modelList.problem ?? `Default ${OPENROUTER_DECISION_MODEL}. A paid model is refused.` : undefined}
+          >
+            {!openRouterModel && <option value="">{modelList.loading ? "Loading models…" : "Choose a decision model"}</option>}
+            {openRouterModels.map((name) => (
+              <option key={name} value={name}>
+                {name}
+              </option>
+            ))}
+            <option value={OTHER_MODEL}>Another free model…</option>
+          </Select>
+          {otherOpenRouterModel && (
+            <Input
+              label="Model name"
+              value={openRouterModel}
+              placeholder={OPENROUTER_DECISION_MODEL}
+              onChange={(event) => setOpenRouterModel(event.target.value)}
+              onBlur={() => {
+                if (openRouterModel.trim()) void saveOpenRouterModel(openRouterModel.trim());
+              }}
+              spellCheck={false}
+              autoComplete="off"
+            />
+          )}
+          <form
+            className="flex flex-col gap-3"
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (status.state !== "checking") void checkOpenRouter(true);
+            }}
+          >
+            <Button type="submit" className="self-start" aria-disabled={status.state === "checking" || undefined}>
+              {status.state === "checking" ? "Checking…" : "Check it"}
+            </Button>
+          </form>
+          <div role="status" className="text-sm empty:hidden">
+            {status.state === "connected" && <p className="text-success">It works: the decision model answered.</p>}
+            {status.state === "failed" && <p className="rounded-card bg-warning-surface px-4 py-3 font-medium text-warning">{status.message}</p>}
+          </div>
+        </Card>
+      )}
       {scorer === "OPENROUTER" && (
         <Card className="flex flex-col gap-6">
           <dl className="grid gap-x-6 gap-y-3 text-sm sm:grid-cols-[140px_1fr]">
@@ -197,7 +298,7 @@ export function ScoringStep({ initial }: { initial: ScoringView }) {
           <KeyField
             label="OpenRouter key for scoring"
             keyState={initial.openRouterKeyState}
-            envName="DOSSIER_OPENROUTER_SCORING_KEY"
+            envName={initial.openRouterKeyEnv ?? "DOSSIER_OPENROUTER_SCORING_KEY"}
             getKey={{ href: OPENROUTER_KEYS_URL, text: "OpenRouter" }}
             onSave={saveOpenRouterKeyField}
           />
@@ -240,7 +341,7 @@ export function ScoringStep({ initial }: { initial: ScoringView }) {
             className="flex flex-col gap-3"
             onSubmit={(event) => {
               event.preventDefault();
-              if (status.state !== "checking") void checkOpenRouter();
+              if (status.state !== "checking") void checkOpenRouter(false);
             }}
           >
             <Button type="submit" className="self-start" aria-disabled={status.state === "checking" || undefined}>
@@ -248,7 +349,7 @@ export function ScoringStep({ initial }: { initial: ScoringView }) {
             </Button>
           </form>
           <div role="status" className="text-sm empty:hidden">
-            {status.state === "connected" && <p className="text-success">It works: OpenRouter answered.</p>}
+            {status.state === "connected" && <p className="text-success">It works: the chat model answered.</p>}
             {status.state === "failed" && <p className="rounded-card bg-warning-surface px-4 py-3 font-medium text-warning">{status.message}</p>}
           </div>
         </Card>
