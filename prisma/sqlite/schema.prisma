@@ -381,6 +381,12 @@ enum AiProvider {
   MISTRAL
   /// LM Studio on the user's own hardware (#210).
   LMSTUDIO
+  /// OpenRouter's hosted OpenAI-compatible API.
+  OPENROUTER
+  /// ChatGPT Plus or Pro through SIWC on the local runtime.
+  CHATGPT_SUBSCRIPTION
+  /// Claude Code CLI OAuth on the machine that runs Dossier.
+  CLAUDE_CLI
 }
 
 enum Creativity {

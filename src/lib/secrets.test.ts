@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { AI_API_KEY, applySecretChange, decryptSecret, encryptSecret, JOB_SOURCE_KEY, SecretUnreadable, secretState } from "./secrets";
+import { AI_API_KEY, applySecretChange, decryptSecret, encryptSecret, JOB_SOURCE_KEY, OPENROUTER_SCORING_KEY, SecretUnreadable, secretState } from "./secrets";
 
 vi.mock("@/lib/env", () => ({ env: { DOSSIER_SECRET: "a".repeat(32) } }));
 
@@ -8,6 +8,7 @@ describe("secrets", () => {
   it("round-trips each kind", () => {
     expect(decryptSecret(JOB_SOURCE_KEY, encryptSecret(JOB_SOURCE_KEY, "ak_test"))).toBe("ak_test");
     expect(decryptSecret(AI_API_KEY, encryptSecret(AI_API_KEY, "sk-test"))).toBe("sk-test");
+    expect(decryptSecret(OPENROUTER_SCORING_KEY, encryptSecret(OPENROUTER_SCORING_KEY, "sk-or-test"))).toBe("sk-or-test");
   });
 
   it("won't read one kind of secret as another", () => {

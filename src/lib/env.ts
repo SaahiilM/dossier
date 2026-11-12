@@ -10,9 +10,18 @@ const SECRET_MIN_LENGTH = 32;
 const GENERATE_SECRET = "for example the output of `openssl rand -base64 32`";
 const HASH_PASSWORD = "Make one with `docker run --rm -it ghcr.io/aientech/dossier hash-password`";
 
-export const AI_PROVIDERS = ["local", "openai", "anthropic", "mistral", "lmstudio"] as const;
+export const AI_PROVIDERS = [
+  "local",
+  "openai",
+  "anthropic",
+  "mistral",
+  "lmstudio",
+  "openrouter",
+  "chatgpt_subscription",
+  "claude_cli",
+] as const;
 export const JOB_SOURCE_NAMES = ["jsearch", "adzuna", "arbeitsagentur", "freehire", "off"] as const;
-export const SCORER_NAMES = ["ai", "jev"] as const;
+export const SCORER_NAMES = ["ai", "jev", "openrouter"] as const;
 
 // An empty value (`DOSSIER_AI_KEY=` in .env) counts as unset.
 const unsetIfEmpty = (value: unknown) =>
@@ -154,6 +163,9 @@ const schema = z.object({
   ),
   // Never echo the value: it's an API key.
   DOSSIER_TYPESAFE_KEY: optional(z.string().trim()),
+  // OpenRouter judging, separate from DOSSIER_AI_* (#274).
+  DOSSIER_OPENROUTER_SCORING_KEY: optional(z.string().trim()),
+  DOSSIER_OPENROUTER_SCORING_MODEL: optional(z.string().trim()),
   // Google sign-in for Gmail and Calendar (E15-1): an OAuth client of type
   // "Web application". Settings → Google can save one instead, which wins.
   // Never echo the secret.

@@ -1,0 +1,1 @@
+-- SQLite stores AiProvider as TEXT; new values need no ALTER TYPE.
