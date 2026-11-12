@@ -4,7 +4,7 @@ import { loadProfile } from "@/lib/profile-data";
 import { loadSettings } from "@/lib/settings-data";
 import { createTestClient, resetDatabase } from "@/test/db";
 
-import { addLanguage, addSkill, applyProfileImport, attachNewProjectSkill, attachNewSkill, createCertification, createCustomItem, createCustomSection, createEducation, createExperience, createProject, createPublication, createReference, deleteCustomSection, discardProfileImport, removeCertification, removeCustomItem, removeEducation, removeExperience, removeLanguage, removePhoto, removeProject, removePublication, removeReference, removeSkill, renameSkillGroup, reorderCertifications, reorderCustomItems, reorderEntries, reorderPublications, reorderSkills, restoreCertification, restoreCustomItem, restoreCustomSection, restoreEducation, restoreExperience, restoreProject, restorePublication, restoreReference, saveBasics, saveCertification, saveCustomItem, saveCustomSection, saveEducation, saveExperience, savePhoto, saveProject, savePublication, saveReference, setExperienceSkill, setRoleVolunteering, setLanguageLevel, setPhotoOnResumes, setProjectSkill, setSkillGroup, setSkillOrder, sortEntriesByDate } from "./actions";
+import { addLanguage, addSkill, applyProfileImport, attachNewProjectSkill, attachNewSkill, createCertification, createCustomItem, createCustomSection, createEducation, createExperience, createProject, createPublication, createReference, deleteCustomSection, discardProfileImport, removeCertification, removeCustomItem, removeEducation, removeExperience, removeLanguage, removePhoto, removeProject, removePublication, removeReference, removeSkill, renameSkillGroup, reorderCertifications, reorderCustomItems, reorderEntries, reorderPublications, reorderSkills, restoreCertification, restoreCustomItem, restoreCustomSection, restoreEducation, restoreExperience, restoreProject, restorePublication, restoreReference, saveBasics, saveCertification, saveCustomItem, saveCustomSection, saveEducation, saveExperience, savePhoto, saveProject, savePublication, saveReference, saveWorkAuthorization, setExperienceSkill, setRoleVolunteering, setLanguageLevel, setPhotoOnResumes, setProjectSkill, setSkillGroup, setSkillOrder, sortEntriesByDate } from "./actions";
 
 // The actions run against the test database, signed in.
 const db = vi.hoisted(() => ({ client: undefined as ReturnType<typeof createTestClient> | undefined }));
@@ -29,6 +29,37 @@ const basics = {
 };
 
 describe("profile actions", () => {
+  it("saves work authorization in ProfileField rows and reloads it", async () => {
+    await saveWorkAuthorization({
+      authorizedCountries: ["Canada"],
+      needsSponsorshipNow: false,
+      needsSponsorshipLater: null,
+      visaStatuses: [{ jurisdiction: "Germany", status: "Blue Card" }],
+      relocationWillingness: true,
+      relocationPreferredCountries: ["Netherlands"],
+    });
+    expect(await loadProfile()).toMatchObject({
+      workAuthorization: {
+        authorizedCountries: ["Canada"],
+        needsSponsorshipNow: false,
+        needsSponsorshipLater: null,
+        visaStatuses: [{ jurisdiction: "Germany", status: "Blue Card" }],
+        relocationWillingness: true,
+        relocationPreferredCountries: ["Netherlands"],
+      },
+    });
+    await saveWorkAuthorization({
+      authorizedCountries: [],
+      needsSponsorshipNow: null,
+      needsSponsorshipLater: null,
+      visaStatuses: [],
+      relocationWillingness: null,
+      relocationPreferredCountries: [],
+    });
+    expect((await prisma().profileField.findMany({ where: { key: { startsWith: "workAuth" } } }))).toEqual([]);
+    expect((await prisma().profileField.findMany({ where: { key: { startsWith: "needsSponsorship" } } }))).toEqual([]);
+  });
+
   it("saves the basics as one row per filled-in field, and removes cleared ones", async () => {
     const fields = () => prisma().profileField.findMany({ select: { key: true, value: true }, orderBy: { key: "asc" } });
     await expect(saveBasics(basics)).resolves.toEqual({ ok: true, data: null });

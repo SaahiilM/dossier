@@ -40,5 +40,6 @@ export function tailoredProfile(profile: ProfileData, units: Unit[]): ProfileDat
     publications: profile.publications.filter(listed("publication:")),
     skills: skillNames === null ? profile.skills : profile.skills.filter((skill) => skillNames.some((name) => sameName(name, skill.name))),
     facts: [],
+    workAuthorization: profile.workAuthorization,
   };
 }

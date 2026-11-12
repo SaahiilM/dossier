@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { ProfileData, PublicationItem } from "@/lib/profile";
+import { emptyWorkAuthorization } from "@/lib/work-authorization";
 
 import { reorderPublications, savePublication } from "./actions";
 import { PublicationsSection } from "./publications-section";
@@ -39,6 +40,7 @@ function Harness() {
     references: [],
     customSections: [],
     facts: [],
+    workAuthorization: emptyWorkAuthorization(),
     photo: null,
   });
   useEffect(() => {

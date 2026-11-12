@@ -1,5 +1,23 @@
 import { LanguageLevel, type CustomSectionFormat } from "@/generated/prisma/enums";
 import type { ProfilePhoto } from "@/lib/photo";
+import {
+  emptyWorkAuthorization,
+  type TriState,
+  type VisaStatusEntry,
+  type WorkAuthorization,
+} from "@/lib/work-authorization";
+
+export type { TriState, VisaStatusEntry, WorkAuthorization };
+export {
+  emptyWorkAuthorization,
+  fieldsFromWorkAuthorization,
+  workAuthorizationFilled,
+  workAuthorizationForScorer,
+  workAuthorizationFromFields,
+  WORK_AUTH_FIELD_KEYS,
+  WORK_AUTH_PROFILE_KEYS,
+  workAuthorizationSchema,
+} from "@/lib/work-authorization";
 
 /** Proficiency levels in the order the language select lists them (PRD PRO-4). */
 export const LANGUAGE_LEVELS: readonly { value: LanguageLevel; label: string }[] = [
@@ -185,7 +203,11 @@ export type ProfileData = {
   customSections: CustomSection[];
   /** "Facts about me": never on a document, only given to the AI. */
   facts: FactItem[];
+  /** Work authorization and relocation: profile-only; not printed on resumes unless the user adds it elsewhere. */
+  workAuthorization: WorkAuthorization;
 };
+
+export const defaultWorkAuthorization = emptyWorkAuthorization;
 
 /** The facts worth sending: trimmed, without empty ones. */
 export function factTexts(facts: { text: string }[]): string[] {

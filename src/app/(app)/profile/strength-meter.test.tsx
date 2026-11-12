@@ -2,6 +2,7 @@ import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import { BASICS_FIELDS, type ProfileData } from "@/lib/profile";
+import { emptyWorkAuthorization } from "@/lib/work-authorization";
 
 import { StrengthMeter } from "./strength-meter";
 
@@ -14,7 +15,7 @@ describe("StrengthMeter", () => {
   it("is a labelled progress bar with the score and the hint", () => {
     render(
       <StrengthMeter
-        profile={{ basics: { ...basics, name: "Jane" }, skills: [], languages: [], experience: [{} as never], projects: [], education: [], certifications: [], publications: [], references: [], customSections: [], facts: [], photo: null }}
+        profile={{ basics: { ...basics, name: "Jane" }, skills: [], languages: [], experience: [{} as never], projects: [], education: [], certifications: [], publications: [], references: [], customSections: [], facts: [], workAuthorization: emptyWorkAuthorization(), photo: null }}
       />,
     );
     const bar = screen.getByRole("progressbar", { name: "Profile strength" });
@@ -27,7 +28,7 @@ describe("StrengthMeter", () => {
     const volunteering = { volunteering: true } as never;
     render(
       <StrengthMeter
-        profile={{ basics: { ...basics, name: "Jane" }, skills: [], languages: [], experience: [volunteering], projects: [], education: [], certifications: [], publications: [], references: [], customSections: [], facts: [], photo: null }}
+        profile={{ basics: { ...basics, name: "Jane" }, skills: [], languages: [], experience: [volunteering], projects: [], education: [], certifications: [], publications: [], references: [], customSections: [], facts: [], workAuthorization: emptyWorkAuthorization(), photo: null }}
       />,
     );
     expect(screen.getByRole("progressbar", { name: "Profile strength" })).toHaveAttribute("aria-valuenow", "7");

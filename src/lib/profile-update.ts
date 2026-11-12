@@ -32,6 +32,7 @@ function updatedCopy(copy: CopiedProfile, live: ProfileData): CopiedProfile {
       return now ? { ...now, format: section.format, items: merged(section.items, now.items) } : section;
     }),
     facts: live.facts,
+    workAuthorization: live.workAuthorization,
   };
 }
 

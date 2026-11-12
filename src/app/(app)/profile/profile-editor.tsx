@@ -8,7 +8,7 @@ import { PageHeader } from "@/components/page-header";
 import { SavedIndicator } from "@/components/saved-indicator";
 import { buttonClassName } from "@/components/ui/button";
 import { toastResult } from "@/components/toast";
-import { factTexts, paidRoles, REQUIRED_BASICS, type CustomSection, type EntryOrder, type ProfileData } from "@/lib/profile";
+import { factTexts, paidRoles, REQUIRED_BASICS, workAuthorizationFilled, type CustomSection, type EntryOrder, type ProfileData } from "@/lib/profile";
 import { withProfileRows, type SectionLayout } from "@/lib/resume-sections";
 
 import { saveResumeSections } from "../resume/actions";
@@ -20,6 +20,7 @@ import { CustomSectionEditor } from "./custom-section";
 import { EducationSection } from "./education-section";
 import { ExperienceSection } from "./experience-section";
 import { FactsSection } from "./facts-section";
+import { WorkAuthorizationSection } from "./work-authorization-section";
 import { ProjectsSection } from "./projects-section";
 import { PublicationsSection } from "./publications-section";
 import { ReferencesSection } from "./references-section";
@@ -66,6 +67,7 @@ export function ProfileEditor({ initial, section, order, sections }: { initial: 
     certifications: String(profile.certifications.length),
     publications: String(profile.publications.length),
     references: String(profile.references.length),
+    workAuthorization: String(workAuthorizationFilled(profile.workAuthorization)),
     facts: String(factTexts(profile.facts).length),
   };
 
@@ -88,6 +90,7 @@ export function ProfileEditor({ initial, section, order, sections }: { initial: 
     certifications: <CertificationsSection profile={profile} update={setProfile} />,
     publications: <PublicationsSection profile={profile} update={setProfile} />,
     references: <ReferencesSection profile={profile} update={setProfile} />,
+    workAuthorization: <WorkAuthorizationSection profile={profile} update={setProfile} />,
     facts: <FactsSection profile={profile} update={setProfile} />,
   };
 

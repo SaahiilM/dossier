@@ -2,6 +2,7 @@ import type { LanguageLevel } from "@/generated/prisma/enums";
 import type { Unit } from "@/lib/application-data";
 import { publicationLabel } from "@/lib/citation";
 import { certificationLabel, LANGUAGE_LEVELS, type DateSpan, type ProfileData } from "@/lib/profile";
+import { emptyWorkAuthorization } from "@/lib/work-authorization";
 
 import sample from "../../prisma/seed/prototype-sample.json";
 
@@ -113,6 +114,7 @@ export function demoProfile(): ProfileData {
     // None in the demo: they're the user's own.
     customSections: [],
     facts: facts.map((text, index) => ({ id: `fact-${index + 1}`, text })),
+    workAuthorization: emptyWorkAuthorization(),
     photo: null,
   };
 }
