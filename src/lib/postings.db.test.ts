@@ -12,6 +12,9 @@ vi.mock("@/lib/prisma", async () => {
   db.client = createTestClient();
   return { prisma: db.client };
 });
+vi.mock("@/lib/env", () => ({
+  env: { DOSSIER_SECRET: "a".repeat(32), DOSSIER_PASSWORD: "a".repeat(60), DATABASE_URL: "file:./test.db" },
+}));
 const prisma = () => db.client!;
 
 const found: FoundPosting = {
@@ -135,7 +138,13 @@ describe("postingStates", () => {
   it("has each result's score, scored or not (#208)", async () => {
     await prisma().postingScore.create({ data: { source: "JSEARCH", externalId: "job-1", score: 82, reasons: ["Research"], redFlags: [], scoredWith: "score-posting@1" } });
     const states = await postingStates([found, { ...found, externalId: "job-2" }]);
-    expect(states.get("JSEARCH:job-1")?.score).toEqual({ score: 82, reasons: ["Research"], redFlags: [] });
+    expect(states.get("JSEARCH:job-1")?.score).toMatchObject({
+      score: 82,
+      reasons: ["Research"],
+      redFlags: [],
+      scoredWith: "score-posting@1",
+      stale: true,
+    });
     expect(states.get("JSEARCH:job-2")?.score).toBeNull();
   });
 

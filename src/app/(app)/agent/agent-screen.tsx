@@ -326,7 +326,15 @@ function CandidateCard({ candidate, children }: { candidate: AgentCandidateView;
           {/* As the source's terms ask (E14-2); the origin names the others. */}
           {linksAttribution(candidate.source) && <SourceAttribution source={candidate.source} url={candidate.url} className="mt-1.5 self-start" />}
         </div>
-        <ScoreBadge score={candidate.score} />
+        <div className="flex shrink-0 flex-col items-end gap-1">
+          <ScoreBadge score={candidate.score} />
+          {candidate.scoreStale && <span className="text-meta text-warning">Stale — score again</span>}
+          {candidate.scoreReview === "ineligible" && <span className="text-meta text-warning">Not eligible for auto-draft</span>}
+          {candidate.scoreReview === "needs_review" && <span className="text-meta text-warning">Needs a closer look</span>}
+          {candidate.autoDraftBlocked && candidate.scoreReview === "eligible" && !candidate.scoreStale && (
+            <span className="text-meta text-muted">Auto-draft off</span>
+          )}
+        </div>
       </div>
       {candidate.reasons.length > 0 && (
         <ul aria-label="Why it fits" className="flex list-disc flex-col gap-1 pl-5 text-sm text-muted">

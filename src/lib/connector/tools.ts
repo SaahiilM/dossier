@@ -6,7 +6,7 @@ import { z } from "zod";
 import { AgentCandidateStatus, ApplicationStatus, DocumentKind } from "@/generated/prisma/enums";
 import { stringsOf } from "@/lib/agent/candidates";
 import { approveCandidate } from "@/lib/agent/draft";
-import { countAgentQueue, loadAgentView } from "@/lib/agent/view";
+import { agentQueueFitSummary, countAgentQueue, loadAgentView } from "@/lib/agent/view";
 import { ActionError } from "@/lib/action";
 import { DASHBOARD_PERIODS, type DashboardPeriod } from "@/lib/dashboard";
 import { loadDashboard } from "@/lib/dashboard-data";
@@ -557,12 +557,15 @@ export function createDossierServer(origin: string): McpServer {
       annotations: { readOnlyHint: true },
     },
     async () => {
-      const [view, queue] = await Promise.all([loadAgentView(), countAgentQueue()]);
+      const [view, queue, fitSummary] = await Promise.all([loadAgentView(), countAgentQueue(), agentQueueFitSummary()]);
       return text({
         enabled: view.enabled,
         auto_draft: view.autoDraft,
         min_score: view.minScore,
         queue_badge: queue,
+        queue_score_stale: fitSummary.stale,
+        queue_needs_review: fitSummary.needsReview,
+        queue_auto_draft_blocked: fitSummary.autoDraftBlocked,
         drafts_awaiting_review: view.drafts.length,
         scored_in_queue: view.scored.length,
         below_minimum: view.belowMinimum.length,
@@ -590,8 +593,10 @@ export function createDossierServer(origin: string): McpServer {
       annotations: { readOnlyHint: true },
     },
     async ({ section, limit }) => {
-      const { agentMinScore } = await loadSettings();
+      const [settings, profile, config] = await Promise.all([loadSettings(), loadProfile(), loadScoringConfig()]);
+      const { agentMinScore } = settings;
       const take = limit ?? 30;
+      const now = new Date();
       const rows = await prisma.agentCandidate.findMany({
         where:
           section === "drafts"
@@ -601,21 +606,27 @@ export function createDossierServer(origin: string): McpServer {
               : { status: { in: [AgentCandidateStatus.SCORED, AgentCandidateStatus.DRAFTING] }, score: { lt: agentMinScore } },
         orderBy: [{ score: "desc" }, { createdAt: "desc" }],
         take,
-        select: { id: true, title: true, company: true, place: true, score: true, status: true, applicationId: true, url: true },
       });
       return text({
         section,
-        candidates: rows.map((row) => ({
-          id: row.id,
-          title: row.title,
-          company: row.company,
-          place: row.place || undefined,
-          score: row.score,
-          status: agentStatusLabel(row.status),
-          application_id: row.applicationId ?? undefined,
-          posting: row.url || undefined,
-          link: linkTo("/agent"),
-        })),
+        candidates: rows.map((row) => {
+          const fit = postingFitFromCandidate(row, profile, config, now);
+          const meta = parsePostingFitMeta(row.meta);
+          return {
+            id: row.id,
+            title: row.title,
+            company: row.company,
+            place: row.place || undefined,
+            score: row.score,
+            status: agentStatusLabel(row.status),
+            score_stale: fit.stale === true,
+            score_review: meta?.review,
+            auto_draft_blocked: fit.stale === true || meta?.blockAutoDraft === true,
+            application_id: row.applicationId ?? undefined,
+            posting: row.url || undefined,
+            link: linkTo("/agent"),
+          };
+        }),
         link: linkTo("/agent"),
       });
     },

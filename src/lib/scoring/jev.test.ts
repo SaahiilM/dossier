@@ -183,6 +183,13 @@ describe("jevFit", () => {
     expect(fit.redFlags).not.toEqual(expect.arrayContaining([expect.stringMatching(/location your profile/i)]));
   });
 
+  it("treats uncertain sponsorship as needs_review, not ineligible", () => {
+    const fit = jevFit(parts({ permit: 0.5, requirements: 0.9, work: 0.9, seniority: 0.9 }));
+    expect(fit.meta?.review).toBe("needs_review");
+    expect(fit.meta?.review).not.toBe("ineligible");
+    expect(fit.redFlags).not.toEqual(expect.arrayContaining([expect.stringMatching(/sponsorship/i)]));
+  });
+
   it("quotes the lines the profile covers, required ones first, and the required ones it misses", () => {
     const fit = jevFit(
       parts({

@@ -33,7 +33,10 @@ vi.mock("@/lib/auth/session", () => ({
 }));
 vi.mock("@/lib/env", () => ({ env: { DOSSIER_SECRET: "a".repeat(32) } }));
 const ai = vi.hoisted(() => ({ ready: true }));
-vi.mock("@/lib/ai/config", () => ({ isAiConfigured: async () => ai.ready, isAiUsable: async () => ai.ready }));
+vi.mock("@/lib/ai/config", async () => {
+  const { PROVIDER_DEFAULTS_STUB } = await import("@/test/ai-config-mock");
+  return { isAiConfigured: async () => ai.ready, isAiUsable: async () => ai.ready, PROVIDER_DEFAULTS: PROVIDER_DEFAULTS_STUB };
+});
 vi.mock("@/lib/jobs/runner", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/jobs/runner")>()),
   startJob: vi.fn(async () => "score-job"),

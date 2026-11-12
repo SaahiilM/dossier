@@ -10,7 +10,8 @@ import type { UsageSink } from "@/lib/usage";
 
 import type { JevPosting } from "./jev";
 
-export const SCORE_POSTING_OPENROUTER_VERSION = "score-posting-openrouter@1";
+import { SCORE_POSTING_OPENROUTER_VERSION } from "./versions";
+export { SCORE_POSTING_OPENROUTER_VERSION } from "./versions";
 
 const OPENROUTER_URL = PROVIDER_DEFAULTS[AiProvider.OPENROUTER].baseUrl;
 

@@ -125,7 +125,11 @@ export async function countPostings(): Promise<{ saved: number; dismissed: numbe
  */
 type PostingStateLookup = PostingRef & { url: string } & Partial<Pick<FoundPosting, "title" | "company" | "place" | "remote" | "salary" | "description">>;
 
-export async function postingStates(found: readonly PostingStateLookup[], db: Prisma.TransactionClient = prisma): Promise<Map<string, PostingState>> {
+export async function postingStates(
+  found: readonly PostingStateLookup[],
+  db: Prisma.TransactionClient = prisma,
+  { withScores = true }: { withScores?: boolean } = {},
+): Promise<Map<string, PostingState>> {
   if (found.length === 0) return new Map();
   const referenceDate = new Date();
   const refs = found.map(({ source, externalId }) => ({ source, externalId }));
@@ -136,31 +140,35 @@ export async function postingStates(found: readonly PostingStateLookup[], db: Pr
     }),
     // An agent draft waiting for review isn't applied for yet (#195).
     db.application.findMany({ where: { postingUrl: { not: "" }, awaitingReview: false }, select: { id: true, postingUrl: true }, orderBy: { createdAt: "asc" } }),
-    db.postingScore.findMany({
-      where: { OR: refs },
-      select: {
-        source: true,
-        externalId: true,
-        score: true,
-        reasons: true,
-        redFlags: true,
-        scoredWith: true,
-        meta: true,
-        inputFingerprint: true,
-      },
-    }),
-    loadProfile(),
-    loadScoringConfig(),
+    withScores
+      ? db.postingScore.findMany({
+          where: { OR: refs },
+          select: {
+            source: true,
+            externalId: true,
+            score: true,
+            reasons: true,
+            redFlags: true,
+            scoredWith: true,
+            meta: true,
+            inputFingerprint: true,
+          },
+        })
+      : Promise.resolve([]),
+    withScores ? loadProfile() : Promise.resolve(null),
+    withScores ? loadScoringConfig() : Promise.resolve(null),
   ]);
   const scoreOf = new Map(
-    scores.map((row) => {
-      const posting = found.find((item) => item.source === row.source && item.externalId === row.externalId);
-      const fingerprint =
-        posting?.description !== undefined && posting.title !== undefined
-          ? scoreInputFingerprint(profile, posting as FoundPosting, config, referenceDate)
-          : null;
-      return [postingKey(row), postingFitFromScoreRow(row, fingerprint)];
-    }),
+    withScores && profile && config
+      ? scores.map((row) => {
+          const posting = found.find((item) => item.source === row.source && item.externalId === row.externalId);
+          const fingerprint =
+            posting?.description !== undefined && posting.title !== undefined
+              ? scoreInputFingerprint(profile, posting as FoundPosting, config, referenceDate)
+              : null;
+          return [postingKey(row), postingFitFromScoreRow(row, fingerprint)];
+        })
+      : [],
   );
   const byKey = new Map(stored.map((posting) => [postingKey(posting), posting]));
   const byLink = new Map<string, string>();

@@ -127,7 +127,8 @@ function VisaRow({
       />
       <Input
         id={statusId}
-        label="Status (optional)"
+        label="Your label (optional)"
+        hint="A short note for you and the scorer only. It does not prove work rights."
         placeholder="e.g. permanent resident"
         value={entry.status}
         onChange={(event) => onChange({ ...entry, status: event.target.value })}

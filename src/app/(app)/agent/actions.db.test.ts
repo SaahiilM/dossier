@@ -26,7 +26,10 @@ vi.mock("@/lib/jobs/runner", async (importOriginal) => ({
   startJob: vi.fn(async () => "new-run"),
 }));
 const setup = vi.hoisted(() => ({ ai: true, source: "JSEARCH" as "JSEARCH" | null }));
-vi.mock("@/lib/ai/config", () => ({ isAiConfigured: async () => setup.ai }));
+vi.mock("@/lib/ai/config", async () => {
+  const { PROVIDER_DEFAULTS_STUB } = await import("@/test/ai-config-mock");
+  return { isAiConfigured: async () => setup.ai, PROVIDER_DEFAULTS: PROVIDER_DEFAULTS_STUB };
+});
 vi.mock("@/lib/job-search/config", () => ({
   loadJobSearchConfig: async () => ({ source: setup.source, saved: true, jsearch: { key: "k", host: "openwebninja", keyState: "set" }, adzuna: { appId: "", key: null, keyState: "none" } }),
   credentialsFor: () => ({ key: "k", host: "openwebninja" }),

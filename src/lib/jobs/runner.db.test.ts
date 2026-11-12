@@ -13,7 +13,10 @@ vi.mock("@/lib/prisma", async () => {
   return { prisma: db.client };
 });
 const ai = vi.hoisted(() => ({ provider: "LOCAL" }));
-vi.mock("@/lib/ai/config", () => ({ loadAiConfig: async () => ({ provider: ai.provider }) }));
+vi.mock("@/lib/ai/config", async () => {
+  const { PROVIDER_DEFAULTS_STUB } = await import("@/test/ai-config-mock");
+  return { loadAiConfig: async () => ({ provider: ai.provider }), PROVIDER_DEFAULTS: PROVIDER_DEFAULTS_STUB };
+});
 vi.spyOn(console, "error").mockImplementation(() => {});
 
 const prisma = () => db.client!;

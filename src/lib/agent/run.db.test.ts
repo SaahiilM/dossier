@@ -7,6 +7,7 @@ import type { JobContext } from "@/lib/jobs/runner";
 import { sweepFinishedJobs } from "@/lib/jobs/retention";
 import { encryptSecret, TYPESAFE_KEY } from "@/lib/secrets";
 import { saveSettings, loadSettings } from "@/lib/settings-data";
+import { PROVIDER_DEFAULTS_STUB } from "@/test/ai-config-mock";
 import { createTestClient, resetDatabase } from "@/test/db";
 
 import { MockProvider } from "../ai/providers/mock";
@@ -66,7 +67,10 @@ vi.mock("@/lib/job-search/config", () => ({
   credentialsFor: () => ({ key: "jsearch-key", host: "openwebninja" }),
   requestContext: () => ({}),
 }));
-vi.mock("@/lib/ai/config", () => ({ isAiConfigured: async () => fake.ai }));
+vi.mock("@/lib/ai/config", () => ({
+  isAiConfigured: async () => fake.ai,
+  PROVIDER_DEFAULTS: PROVIDER_DEFAULTS_STUB,
+}));
 vi.mock("@/lib/ai", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/ai")>()),
   getAiProvider: async () =>
@@ -407,7 +411,9 @@ describe("runAgentScan (E16-3)", () => {
     expect(fake.searches).toBe(3);
     expect(await prisma().job.count()).toBe(0);
     const fourth = await runAgentScan({ manual: true }, context(), new Date(now.getTime() + 6 * hour));
-    expect(fourth.message).toBe("The agent needs 1 source request, but may use only 3 in 24 hours. Next eligible: Wed 21 Oct, 08:00 (UTC).");
+    expect(fourth.message).toMatch(
+      /^The agent needs 1 source request, but may use only 3 in 24 hours\. Next eligible: Wed 21 Oct, \d{2}:\d{2} \(.+\)\.$/,
+    );
     expect(fake.searches).toBe(3);
     // A day after the first, one may go again.
     const firstAttempt = (await loadSettings()).agentRuns.at(-1)!.sourceRequestAts![0];

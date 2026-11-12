@@ -49,7 +49,10 @@ const calendar = vi.hoisted(() => ({
 }));
 vi.mock("@/lib/google/availability", () => ({ syncInterviewToCalendar: calendar.sync }));
 const ai = vi.hoisted(() => ({ ready: true }));
-vi.mock("@/lib/ai/config", () => ({ isAiConfigured: async () => ai.ready }));
+vi.mock("@/lib/ai/config", async () => {
+  const { PROVIDER_DEFAULTS_STUB } = await import("@/test/ai-config-mock");
+  return { isAiConfigured: async () => ai.ready, PROVIDER_DEFAULTS: PROVIDER_DEFAULTS_STUB };
+});
 // Jobs are queued for real, but don't run.
 vi.mock("@/lib/jobs/runner", async (importOriginal) => {
   const runner = await importOriginal<typeof import("@/lib/jobs/runner")>();

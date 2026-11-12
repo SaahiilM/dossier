@@ -20,7 +20,8 @@ import { answerSchema, type Answer, type Question } from "./typesafe";
 // Direct scorer: the same questions, weights, and line evidence as Jev.
 // It is not the benchmark early-gate plus chat cascade.
 
-export const SCORE_POSTING_OPENROUTER_DECISIONS_VERSION = "score-posting-openrouter-decisions@3";
+import { SCORE_POSTING_OPENROUTER_DECISIONS_VERSION } from "./versions";
+export { SCORE_POSTING_OPENROUTER_DECISIONS_VERSION } from "./versions";
 
 export const DECISIONS_URL = "https://openrouter.ai/api/alpha/decisions";
 export const DECISION_CATALOG_URL = "https://openrouter.ai/api/v1/models?output_modalities=decisions";
