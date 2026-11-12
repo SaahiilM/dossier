@@ -1,0 +1,974 @@
+{
+  "node": "v24.14.1",
+  "sessionStartedAt": "2026-11-12T20:28:39.215Z",
+  "sameSession": true,
+  "preserved": {
+    "results.json": "2ec4513a9bd357c43e840f48c3530e1e0a5bc6818e041948600b0089463f6c34",
+    "report.md": "3d2abef0cbcd7bd7aa9fbfbf034d0cf1e02831f67978a6a63ff61c58a467ce5c"
+  },
+  "reviews": {
+    "available": true,
+    "files": [
+      {
+        "file": "gpt-6-luna-neutral.json",
+        "records": 0,
+        "used": false
+      },
+      {
+        "file": "gpt-6-luna.json",
+        "records": 0,
+        "used": false
+      },
+      {
+        "file": "haiku-5.5-neutral.json",
+        "records": 0,
+        "used": false
+      },
+      {
+        "file": "haiku-5.5.json",
+        "records": 0,
+        "used": false
+      },
+      {
+        "file": "neutral-cases.json",
+        "records": 42,
+        "used": true
+      },
+      {
+        "file": "neutral-id-map.json",
+        "records": 0,
+        "used": false
+      },
+      {
+        "file": "sonnet-5.5-neutral.json",
+        "records": 0,
+        "used": false
+      },
+      {
+        "file": "sonnet-5.5.json",
+        "records": 0,
+        "used": false
+      }
+    ]
+  },
+  "fairSame42": true,
+  "labelsSent": false,
+  "baselineCallsSent": false,
+  "savings": "scenario-estimate",
+  "note": "Cost and token sums use the same 42 cases in the same order. Smoke calls stay separate.",
+  "fingerprints": [
+    {
+      "id": "e01",
+      "split": "dev",
+      "sha256": "7bb1a39a4bc39d3fa6d7951eeeb1fcf18f32ba4375a5a50d1f34e47f5304b35e"
+    },
+    {
+      "id": "e02",
+      "split": "dev",
+      "sha256": "5172c2d68da5e5a29ad974199583cdfdb4d032205dfd40d09bddf21aab3b41ca"
+    },
+    {
+      "id": "e03",
+      "split": "heldout",
+      "sha256": "ab5add6d18aaa3f71bb465c3f9f2d8f6d936f64169aa677b18d095bbed5dfc24"
+    },
+    {
+      "id": "e04",
+      "split": "heldout",
+      "sha256": "0e71f6d704ee62e019fe4f747d269bfbb1615f14df9ac49440f1d78392b494f0"
+    },
+    {
+      "id": "e05",
+      "split": "heldout",
+      "sha256": "c7c2b64653991cfeadeea8037320a30703513038bad394a4353f4dd008b4dea0"
+    },
+    {
+      "id": "e06",
+      "split": "dev",
+      "sha256": "083037d748f128bf7b851732a2179a952cb6cc4d3e3a65c7120dbd9143b6d3fc"
+    },
+    {
+      "id": "e07",
+      "split": "dev",
+      "sha256": "f0f9568cffc2eca72fd0dffeacb5d3d9ca09ecec1535a96a2ba86cb88aeec2f4"
+    },
+    {
+      "id": "e08",
+      "split": "heldout",
+      "sha256": "9289fb260329c27140e5f4318dc0f02c9b83229dff586227939e8254aae6fca4"
+    },
+    {
+      "id": "e09",
+      "split": "heldout",
+      "sha256": "5b43d3114806094517f533902292937e776a62cf4a52e36576de5824a6592a2b"
+    },
+    {
+      "id": "e10",
+      "split": "heldout",
+      "sha256": "f0611938b79a1e74f90cf415468a67a1f095553d8355bd8fc7ec9badec4d5590"
+    },
+    {
+      "id": "e11",
+      "split": "dev",
+      "sha256": "fe801e0287eb41ec3d16fa2ca58ff38a5b2803f5825dad2cb3bf25592e8050f7"
+    },
+    {
+      "id": "e12",
+      "split": "dev",
+      "sha256": "56d96d32d7548bb9132221eb9b461470ee99ca84a82f012eecaba8fb0bc9d107"
+    },
+    {
+      "id": "e13",
+      "split": "heldout",
+      "sha256": "710b20b75212ffdacb67dfe651901f49d13ab8aba862516acca23863e0b84de1"
+    },
+    {
+      "id": "e14",
+      "split": "heldout",
+      "sha256": "b7cd9a0686bc06cac73d307d89eb72117094d2d718617eacb72f23ce17fe9804"
+    },
+    {
+      "id": "n01",
+      "split": "dev",
+      "sha256": "a77248a6378840117b9d7b2f0939c482391a890e0529c9672d55ad71e7b9db7a"
+    },
+    {
+      "id": "n02",
+      "split": "dev",
+      "sha256": "4efda33da85a1693cf0599b25f7181ab916d413c71e130d8e18ce2bd02eec6f5"
+    },
+    {
+      "id": "n03",
+      "split": "heldout",
+      "sha256": "41bfd61b9a50998323aa633e69ace2145d127ba3f1eaee68c16a8b4cadcfaf5b"
+    },
+    {
+      "id": "n04",
+      "split": "heldout",
+      "sha256": "e829a4a2d64fa6653e1d92e0fb42092e3a7018400dea30846b122a39fa7ec13d"
+    },
+    {
+      "id": "n05",
+      "split": "heldout",
+      "sha256": "f9c51c9a3280a3d1bdbf50a448213f6f0cccf4788f3886cf787ca8e9d661a020"
+    },
+    {
+      "id": "n06",
+      "split": "dev",
+      "sha256": "f35174421ae4cd350221d3a825f0bc3a553e67ef6389f08f74b303cfc2e56c96"
+    },
+    {
+      "id": "n07",
+      "split": "dev",
+      "sha256": "7eaf2deed00b1623669758a3f208cd9c5c156714daa02df4599d9bcbc0d5d1f4"
+    },
+    {
+      "id": "n08",
+      "split": "heldout",
+      "sha256": "cd17cbf4b6f2366013c519c0d4d4f221e73999c4b51e5f3d566a4dce2c409126"
+    },
+    {
+      "id": "n09",
+      "split": "heldout",
+      "sha256": "6e26f784a6707b378766164d7a93d77b6a25ed8137d496d9c1fdc538ebab873d"
+    },
+    {
+      "id": "n10",
+      "split": "heldout",
+      "sha256": "202c3acc407f0a62e67c51733f12bc475283ea0a58fc27b092eb9a61cac3a578"
+    },
+    {
+      "id": "n11",
+      "split": "dev",
+      "sha256": "e4aca1635c36df059f5b70666fc3202d4df02ffd1f66db843d759cbf00b936c8"
+    },
+    {
+      "id": "n12",
+      "split": "dev",
+      "sha256": "1e773eedebda6cae8bf857ebc6b1c2ebb8330bc26272b9771832db7734e557ff"
+    },
+    {
+      "id": "n13",
+      "split": "heldout",
+      "sha256": "9ea3a23649c7eea7cd86f4298bccf986af3ec422088d23021f0e3f9bae210305"
+    },
+    {
+      "id": "n14",
+      "split": "heldout",
+      "sha256": "70cb6627565e0e7f315fc47adfc93306dd45ef4bffd8e0c7f122c153b01ca7d1"
+    },
+    {
+      "id": "a01",
+      "split": "dev",
+      "sha256": "1d0efa5cbe129aeb731303b1108af1f88069a7726e6adc2134fd8a1bfaf7d6d2"
+    },
+    {
+      "id": "a02",
+      "split": "dev",
+      "sha256": "b190ad970b7ce975663952fd3e37e0b32ec7a9aa54ac743b06731def03f05164"
+    },
+    {
+      "id": "a03",
+      "split": "heldout",
+      "sha256": "7ef4fd0718b61462b04a1ae918fd63f9e256cd9bb32d1aa72e0b7f83200228bf"
+    },
+    {
+      "id": "a04",
+      "split": "heldout",
+      "sha256": "88c2acc98345a086e6a812aee3fa7ef5842a912ac2c6577e782538dfbc6fb583"
+    },
+    {
+      "id": "a05",
+      "split": "heldout",
+      "sha256": "da2c7ae1c5973b4973dbf9c5fc634c8d0286be06b50ba13cc8726341348a6265"
+    },
+    {
+      "id": "a06",
+      "split": "dev",
+      "sha256": "583d495b081c529fadc6e72941cd0e0a552ef13eb8f58fe263c1d57acff0ebaa"
+    },
+    {
+      "id": "a07",
+      "split": "dev",
+      "sha256": "f36e652c8725f2b824bea22294be84c339476ec412c310e34102fc0d08195139"
+    },
+    {
+      "id": "a08",
+      "split": "heldout",
+      "sha256": "284b974f0f7aa35761b7d284521758f1a93f32a813ce8281357f9d6c84242873"
+    },
+    {
+      "id": "a09",
+      "split": "heldout",
+      "sha256": "2fe8b33196afa844c838b08cd83c6086a1622bc93855023b96360c5afa9a727e"
+    },
+    {
+      "id": "a10",
+      "split": "heldout",
+      "sha256": "3570fc3bd84ca1d18994b3ede49d41caa69d7e2bba28a44a0ca24767ba80738b"
+    },
+    {
+      "id": "a11",
+      "split": "dev",
+      "sha256": "de93bb57f39054c7ecd72f6fbfda16419e84f0134220480af843be594b5e24e6"
+    },
+    {
+      "id": "a12",
+      "split": "dev",
+      "sha256": "2bcc9a224cb5f20fd70d7628783c2876c9ff215c696239402b032d3839a647d7"
+    },
+    {
+      "id": "a13",
+      "split": "heldout",
+      "sha256": "a19e1eea7f643c661977d4d0b1d199a7e33be89855346042e5d8887abd575da2"
+    },
+    {
+      "id": "a14",
+      "split": "heldout",
+      "sha256": "9f5ff16ba93fb35a7f1247ab07940035ea11b90076fb0dd1607362441f52a769"
+    }
+  ],
+  "perModel": [
+    {
+      "model": "perplexity/pplx-decider-v1.3:free",
+      "provenance": {
+        "source": "live",
+        "sameSession": true,
+        "completedAt": "2026-11-12T20:31:21.553Z",
+        "note": null
+      },
+      "same42": true,
+      "rows": 42,
+      "heldout": {
+        "cases": 24,
+        "falseNegatives": 0,
+        "eligible": 8,
+        "eligibleErrors": 0,
+        "falseNegativeRate": 0,
+        "directPass": 6,
+        "directPassRate": 0.75,
+        "gateRecallHits": 8,
+        "gateRecall": 1,
+        "recall": 0.75,
+        "falsePositives": 0,
+        "coverage": 0.5416666666666666,
+        "selectiveAccuracy": 0.9230769230769231,
+        "selectiveCorrect": 12,
+        "selectiveCases": 13,
+        "confusion": {
+          "eligible": {
+            "pass": 6,
+            "reject": 0,
+            "escalate": 2
+          },
+          "ineligible": {
+            "pass": 0,
+            "reject": 6,
+            "escalate": 2
+          },
+          "ambiguous": {
+            "pass": 1,
+            "reject": 0,
+            "escalate": 7
+          }
+        },
+        "errors": 0,
+        "pass": 7,
+        "reject": 6,
+        "escalate": 11
+      },
+      "intervals": {
+        "directPassRate": {
+          "successes": 6,
+          "n": 8,
+          "p": 0.75,
+          "low": 0.40926987910258916,
+          "high": 0.9285223111419724,
+          "z": 1.96
+        },
+        "gateRecall": {
+          "successes": 8,
+          "n": 8,
+          "p": 1,
+          "low": 0.6755843804891231,
+          "high": 1,
+          "z": 1.96
+        },
+        "falseNegativeRate": {
+          "successes": 0,
+          "n": 8,
+          "p": 0,
+          "low": 0,
+          "high": 0.3244156195108769,
+          "z": 1.96
+        },
+        "coverage": {
+          "successes": 13,
+          "n": 24,
+          "p": 0.5416666666666666,
+          "low": 0.35074553553106635,
+          "high": 0.7210894164831857,
+          "z": 1.96
+        },
+        "selectiveAccuracy": {
+          "successes": 12,
+          "n": 13,
+          "p": 0.9230769230769231,
+          "low": 0.6668546607175265,
+          "high": 0.9862899336203037,
+          "z": 1.96
+        }
+      },
+      "cases": {
+        "dev": {
+          "inputTokens": {
+            "sum": 26645,
+            "known": 18,
+            "missing": 0
+          },
+          "outputTokens": {
+            "sum": 220,
+            "known": 18,
+            "missing": 0
+          },
+          "cachedTokens": {
+            "sum": 0,
+            "known": 0,
+            "missing": 18
+          },
+          "reasoningTokens": {
+            "sum": 0,
+            "known": 0,
+            "missing": 18
+          },
+          "costUsd": {
+            "sum": 0,
+            "known": 18,
+            "missing": 0
+          }
+        },
+        "heldout": {
+          "inputTokens": {
+            "sum": 37614,
+            "known": 24,
+            "missing": 0
+          },
+          "outputTokens": {
+            "sum": 312,
+            "known": 24,
+            "missing": 0
+          },
+          "cachedTokens": {
+            "sum": 0,
+            "known": 0,
+            "missing": 24
+          },
+          "reasoningTokens": {
+            "sum": 0,
+            "known": 0,
+            "missing": 24
+          },
+          "costUsd": {
+            "sum": 0,
+            "known": 24,
+            "missing": 0
+          }
+        },
+        "all": {
+          "inputTokens": {
+            "sum": 64259,
+            "known": 42,
+            "missing": 0
+          },
+          "outputTokens": {
+            "sum": 532,
+            "known": 42,
+            "missing": 0
+          },
+          "cachedTokens": {
+            "sum": 0,
+            "known": 0,
+            "missing": 42
+          },
+          "reasoningTokens": {
+            "sum": 0,
+            "known": 0,
+            "missing": 42
+          },
+          "costUsd": {
+            "sum": 0,
+            "known": 42,
+            "missing": 0
+          }
+        }
+      },
+      "smokeCostUsd": 0
+    },
+    {
+      "model": "parallel/decisions-fast:free",
+      "provenance": {
+        "source": "live",
+        "sameSession": true,
+        "completedAt": "2026-11-12T20:33:56.174Z",
+        "note": null
+      },
+      "same42": true,
+      "rows": 42,
+      "heldout": {
+        "cases": 24,
+        "falseNegatives": 0,
+        "eligible": 8,
+        "eligibleErrors": 0,
+        "falseNegativeRate": 0,
+        "directPass": 2,
+        "directPassRate": 0.25,
+        "gateRecallHits": 8,
+        "gateRecall": 1,
+        "recall": 0.25,
+        "falsePositives": 0,
+        "coverage": 0.08333333333333333,
+        "selectiveAccuracy": 1,
+        "selectiveCorrect": 2,
+        "selectiveCases": 2,
+        "confusion": {
+          "eligible": {
+            "pass": 2,
+            "reject": 0,
+            "escalate": 6
+          },
+          "ineligible": {
+            "pass": 0,
+            "reject": 0,
+            "escalate": 8
+          },
+          "ambiguous": {
+            "pass": 0,
+            "reject": 0,
+            "escalate": 8
+          }
+        },
+        "errors": 0,
+        "pass": 2,
+        "reject": 0,
+        "escalate": 22
+      },
+      "intervals": {
+        "directPassRate": {
+          "successes": 2,
+          "n": 8,
+          "p": 0.25,
+          "low": 0.07147768885802763,
+          "high": 0.5907301208974108,
+          "z": 1.96
+        },
+        "gateRecall": {
+          "successes": 8,
+          "n": 8,
+          "p": 1,
+          "low": 0.6755843804891231,
+          "high": 1,
+          "z": 1.96
+        },
+        "falseNegativeRate": {
+          "successes": 0,
+          "n": 8,
+          "p": 0,
+          "low": 0,
+          "high": 0.3244156195108769,
+          "z": 1.96
+        },
+        "coverage": {
+          "successes": 2,
+          "n": 24,
+          "p": 0.08333333333333333,
+          "low": 0.02315832784297353,
+          "high": 0.2584921520145059,
+          "z": 1.96
+        },
+        "selectiveAccuracy": {
+          "successes": 2,
+          "n": 2,
+          "p": 1,
+          "low": 0.34237195288961925,
+          "high": 1,
+          "z": 1.96
+        }
+      },
+      "cases": {
+        "dev": {
+          "inputTokens": {
+            "sum": 75557,
+            "known": 18,
+            "missing": 0
+          },
+          "outputTokens": {
+            "sum": 0,
+            "known": 18,
+            "missing": 0
+          },
+          "cachedTokens": {
+            "sum": 0,
+            "known": 0,
+            "missing": 18
+          },
+          "reasoningTokens": {
+            "sum": 0,
+            "known": 0,
+            "missing": 18
+          },
+          "costUsd": {
+            "sum": 0,
+            "known": 18,
+            "missing": 0
+          }
+        },
+        "heldout": {
+          "inputTokens": {
+            "sum": 104229,
+            "known": 24,
+            "missing": 0
+          },
+          "outputTokens": {
+            "sum": 0,
+            "known": 24,
+            "missing": 0
+          },
+          "cachedTokens": {
+            "sum": 0,
+            "known": 0,
+            "missing": 24
+          },
+          "reasoningTokens": {
+            "sum": 0,
+            "known": 0,
+            "missing": 24
+          },
+          "costUsd": {
+            "sum": 0,
+            "known": 24,
+            "missing": 0
+          }
+        },
+        "all": {
+          "inputTokens": {
+            "sum": 179786,
+            "known": 42,
+            "missing": 0
+          },
+          "outputTokens": {
+            "sum": 0,
+            "known": 42,
+            "missing": 0
+          },
+          "cachedTokens": {
+            "sum": 0,
+            "known": 0,
+            "missing": 42
+          },
+          "reasoningTokens": {
+            "sum": 0,
+            "known": 0,
+            "missing": 42
+          },
+          "costUsd": {
+            "sum": 0,
+            "known": 42,
+            "missing": 0
+          }
+        }
+      },
+      "smokeCostUsd": 0
+    },
+    {
+      "model": "typesafe/jev-1.14",
+      "provenance": {
+        "source": "live",
+        "sameSession": true,
+        "completedAt": "2026-11-12T20:36:08.237Z",
+        "note": null
+      },
+      "same42": true,
+      "rows": 42,
+      "heldout": {
+        "cases": 24,
+        "falseNegatives": 0,
+        "eligible": 8,
+        "eligibleErrors": 0,
+        "falseNegativeRate": 0,
+        "directPass": 2,
+        "directPassRate": 0.25,
+        "gateRecallHits": 8,
+        "gateRecall": 1,
+        "recall": 0.25,
+        "falsePositives": 0,
+        "coverage": 0.2916666666666667,
+        "selectiveAccuracy": 1,
+        "selectiveCorrect": 7,
+        "selectiveCases": 7,
+        "confusion": {
+          "eligible": {
+            "pass": 2,
+            "reject": 0,
+            "escalate": 6
+          },
+          "ineligible": {
+            "pass": 0,
+            "reject": 5,
+            "escalate": 3
+          },
+          "ambiguous": {
+            "pass": 0,
+            "reject": 0,
+            "escalate": 8
+          }
+        },
+        "errors": 0,
+        "pass": 2,
+        "reject": 5,
+        "escalate": 17
+      },
+      "intervals": {
+        "directPassRate": {
+          "successes": 2,
+          "n": 8,
+          "p": 0.25,
+          "low": 0.07147768885802763,
+          "high": 0.5907301208974108,
+          "z": 1.96
+        },
+        "gateRecall": {
+          "successes": 8,
+          "n": 8,
+          "p": 1,
+          "low": 0.6755843804891231,
+          "high": 1,
+          "z": 1.96
+        },
+        "falseNegativeRate": {
+          "successes": 0,
+          "n": 8,
+          "p": 0,
+          "low": 0,
+          "high": 0.3244156195108769,
+          "z": 1.96
+        },
+        "coverage": {
+          "successes": 7,
+          "n": 24,
+          "p": 0.2916666666666667,
+          "low": 0.14914460334164278,
+          "high": 0.49168063658709704,
+          "z": 1.96
+        },
+        "selectiveAccuracy": {
+          "successes": 7,
+          "n": 7,
+          "p": 1,
+          "low": 0.6456611570247934,
+          "high": 1,
+          "z": 1.96
+        }
+      },
+      "cases": {
+        "dev": {
+          "inputTokens": {
+            "sum": 35021,
+            "known": 18,
+            "missing": 0
+          },
+          "outputTokens": {
+            "sum": 4754,
+            "known": 18,
+            "missing": 0
+          },
+          "cachedTokens": {
+            "sum": 0,
+            "known": 0,
+            "missing": 18
+          },
+          "reasoningTokens": {
+            "sum": 0,
+            "known": 0,
+            "missing": 18
+          },
+          "costUsd": {
+            "sum": 0.0014708820000000002,
+            "known": 18,
+            "missing": 0
+          }
+        },
+        "heldout": {
+          "inputTokens": {
+            "sum": 49222,
+            "known": 24,
+            "missing": 0
+          },
+          "outputTokens": {
+            "sum": 6852,
+            "known": 24,
+            "missing": 0
+          },
+          "cachedTokens": {
+            "sum": 0,
+            "known": 0,
+            "missing": 24
+          },
+          "reasoningTokens": {
+            "sum": 0,
+            "known": 0,
+            "missing": 24
+          },
+          "costUsd": {
+            "sum": 0.002067324,
+            "known": 24,
+            "missing": 0
+          }
+        },
+        "all": {
+          "inputTokens": {
+            "sum": 84243,
+            "known": 42,
+            "missing": 0
+          },
+          "outputTokens": {
+            "sum": 11606,
+            "known": 42,
+            "missing": 0
+          },
+          "cachedTokens": {
+            "sum": 0,
+            "known": 0,
+            "missing": 42
+          },
+          "reasoningTokens": {
+            "sum": 0,
+            "known": 0,
+            "missing": 42
+          },
+          "costUsd": {
+            "sum": 0.003538206,
+            "known": 42,
+            "missing": 0
+          }
+        }
+      },
+      "smokeCostUsd": 0.000012012
+    }
+  ],
+  "pairs": [
+    {
+      "a": "perplexity/pplx-decider-v1.3:free",
+      "b": "parallel/decisions-fast:free",
+      "all": {
+        "paired": 42,
+        "equal": 25,
+        "differ": 17,
+        "unpaired": 0,
+        "missingGate": 0,
+        "disagreement": {
+          "successes": 17,
+          "n": 42,
+          "p": 0.40476190476190477,
+          "low": 0.27042647671209086,
+          "high": 0.5550595447182258,
+          "z": 1.96
+        },
+        "passDiscordant": {
+          "aOnly": 8,
+          "bOnly": 0,
+          "ci": {
+            "successes": 8,
+            "n": 8,
+            "p": 1,
+            "low": 0.6755843804891231,
+            "high": 1,
+            "z": 1.96
+          }
+        }
+      },
+      "heldout": {
+        "paired": 24,
+        "equal": 13,
+        "differ": 11,
+        "unpaired": 0,
+        "missingGate": 0,
+        "disagreement": {
+          "successes": 11,
+          "n": 24,
+          "p": 0.4583333333333333,
+          "low": 0.27891058351681425,
+          "high": 0.6492544644689338,
+          "z": 1.96
+        },
+        "passDiscordant": {
+          "aOnly": 5,
+          "bOnly": 0,
+          "ci": {
+            "successes": 5,
+            "n": 5,
+            "p": 1,
+            "low": 0.5655085052479191,
+            "high": 1,
+            "z": 1.96
+          }
+        }
+      }
+    },
+    {
+      "a": "perplexity/pplx-decider-v1.3:free",
+      "b": "typesafe/jev-1.14",
+      "all": {
+        "paired": 42,
+        "equal": 30,
+        "differ": 12,
+        "unpaired": 0,
+        "missingGate": 0,
+        "disagreement": {
+          "successes": 12,
+          "n": 42,
+          "p": 0.2857142857142857,
+          "low": 0.1716685874457567,
+          "high": 0.43567496077245566,
+          "z": 1.96
+        },
+        "passDiscordant": {
+          "aOnly": 8,
+          "bOnly": 0,
+          "ci": {
+            "successes": 8,
+            "n": 8,
+            "p": 1,
+            "low": 0.6755843804891231,
+            "high": 1,
+            "z": 1.96
+          }
+        }
+      },
+      "heldout": {
+        "paired": 24,
+        "equal": 16,
+        "differ": 8,
+        "unpaired": 0,
+        "missingGate": 0,
+        "disagreement": {
+          "successes": 8,
+          "n": 24,
+          "p": 0.3333333333333333,
+          "low": 0.17971978688379642,
+          "high": 0.5329404050591954,
+          "z": 1.96
+        },
+        "passDiscordant": {
+          "aOnly": 5,
+          "bOnly": 0,
+          "ci": {
+            "successes": 5,
+            "n": 5,
+            "p": 1,
+            "low": 0.5655085052479191,
+            "high": 1,
+            "z": 1.96
+          }
+        }
+      }
+    },
+    {
+      "a": "parallel/decisions-fast:free",
+      "b": "typesafe/jev-1.14",
+      "all": {
+        "paired": 42,
+        "equal": 27,
+        "differ": 15,
+        "unpaired": 0,
+        "missingGate": 0,
+        "disagreement": {
+          "successes": 15,
+          "n": 42,
+          "p": 0.35714285714285715,
+          "low": 0.22988992501626865,
+          "high": 0.5083391071292063,
+          "z": 1.96
+        },
+        "passDiscordant": {
+          "aOnly": 4,
+          "bOnly": 4,
+          "ci": {
+            "successes": 4,
+            "n": 8,
+            "p": 0.5,
+            "low": 0.21521252682444186,
+            "high": 0.7847874731755582,
+            "z": 1.96
+          }
+        }
+      },
+      "heldout": {
+        "paired": 24,
+        "equal": 15,
+        "differ": 9,
+        "unpaired": 0,
+        "missingGate": 0,
+        "disagreement": {
+          "successes": 9,
+          "n": 24,
+          "p": 0.375,
+          "low": 0.21159133433631458,
+          "high": 0.5729038096209293,
+          "z": 1.96
+        },
+        "passDiscordant": {
+          "aOnly": 2,
+          "bOnly": 2,
+          "ci": {
+            "successes": 2,
+            "n": 4,
+            "p": 0.5,
+            "low": 0.15003570882017148,
+            "high": 0.8499642911798285,
+            "z": 1.96
+          }
+        }
+      }
+    }
+  ]
+}
