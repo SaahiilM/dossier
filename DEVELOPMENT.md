@@ -203,7 +203,9 @@ docker compose exec -e JOBS_LIVE=freehire app yarn vitest run src/lib/job-search
 
 ## Scoring
 
-Score in Find jobs and the job agent score postings with what Settings → Scoring chose (`src/lib/scoring`): the AI model's `score-posting` task, or Jev, TypeSafe's System One model, with the user's TypeSafe key. Until a choice is saved, `DOSSIER_SCORER` and `DOSSIER_TYPESAFE_KEY` decide. `loadPostingScorer()` in `index.ts` sets up either one; both give a score from 0 to 100 with up to four reasons and three red flags, and `scoredWith` names what made it.
+Score in Find jobs and the job agent score postings with what Settings → Scoring chose (`src/lib/scoring`): the AI model's `score-posting` task, Jev (TypeSafe's System One model, with the user's TypeSafe key), or an independent OpenRouter model (`score-posting-openrouter` through `openrouter.ts`, with its own key and model in Settings → Scoring or `DOSSIER_OPENROUTER_SCORING_KEY` and `DOSSIER_OPENROUTER_SCORING_MODEL`). That OpenRouter key is **not** the same as Settings → AI provider when you pick OpenRouter for writing; scoring is billed separately. Until a choice is saved, `DOSSIER_SCORER` and the matching variables decide. `loadPostingScorer()` in `index.ts` sets up whichever is chosen; each gives a score from 0 to 100 with up to four reasons and three red flags, and `scoredWith` names what made it. OpenRouter structured-output requests set `provider.require_parameters: true` so only endpoints that support the JSON schema are used.
+
+**ChatGPT plan and Claude Code** (`CHATGPT_SUBSCRIPTION`, `CLAUDE_CLI` in `AiProvider`): Settings → AI provider can use SIWC (`src/lib/siwc`) for ChatGPT Plus or Pro on the machine that runs Dossier (desktop app with `DOSSIER_DESKTOP_TOKEN`, or `DOSSIER_PUBLIC_URL` on localhost), or the Claude Code CLI OAuth session from `claude login` on that machine. Credentials stay in the data directory on disk; settings and APIs expose only redacted account summaries. Hosted installs without loopback cannot finish ChatGPT sign-in in a remote browser tab.
 
 Jev answers typed questions and writes no text, so `jev.ts` asks, in one request, three Scores about the whole posting (how much of it the profile covers, how close the past work is, the level), three Nouls (a location or permit the profile can't meet, a missing language, a posting too thin to judge) and, for each line `posting-lines.ts` finds (bullets and sentences, wrapped lines joined), whether it's asked of applicants and whether the profile shows it. Code weighs the Scores (`JEV_WEIGHTS`), takes off for the mismatches and quotes the lines: "Covers: …", "Missing: …". `typesafe.ts` is the HTTP client: it retries 429 and 529 and turns failures into an `AiError` with a message for people.
 
@@ -242,6 +244,16 @@ Per-search history reports **source collection**, not successful AI evaluation: 
 
 The end-to-end specs `e2e/agent.spec.ts` and `e2e/agent-searches.spec.ts` run against the fake JSearch and fake AI, which scores by title (`posting_score` in `e2e/fake-ai.mts`). They cover multiple-search CRUD, cross-tab cap/stale errors, source partial failure, shared quota/score limits, attribution after rename/delete, v8 exports, mobile layout and accessibility. Database tests cover migration/bootstrap, backup round-trips, exclusion/overlap, reservation accounting and schedule deferral. No real source or paid AI requests are needed.
 
+## MCP connector
+
+Dossier exposes a Streamable HTTP MCP server at `/api/mcp` (`src/lib/connector/tools.ts`, `src/app/api/mcp/route.ts`) when Settings → MCP connector is on. OAuth tokens use the single scope `dossier` (`src/lib/connector/oauth.ts`); there is no broader scope for secrets or provider settings.
+
+**Privacy:** tools never return private application notes, profile contact details, or a cover letter's sender/signature blocks. External agents cannot edit those parts or the application email. Agent-prepared drafts stay off Applications, the dashboard and `list_applications` until `approve_agent_candidate` (same as Approve on the Agent screen). `set_application_status` still promotes an awaiting-review agent draft when the user moves the application past Draft, matching the UI.
+
+**Typical flows:** `search_jobs` → `save_job_scores` → `get_posting` → `save_application` (or `draft_application` + `check_draft` when Dossier's own AI is configured) → `update_application_unit` while the user reviews. Job agent: `get_agent_status` → `list_agent_candidates` / `get_agent_candidate` → `approve_agent_candidate` (dismiss in Dossier's Agent screen). Overview: `get_dashboard`, `get_profile`, `list_applications`, `get_application`, `set_application_status`.
+
+**Tests:** `src/lib/connector/tools.db.test.ts` exercises tools through `/api/mcp` on the demo database; `src/app/api/mcp/route.test.ts` checks the tool list and auth. MCP clients vary; connect with your app's OAuth or connector UI, then call `tools/list`—do not assume a specific CLI command.
+
 ## Usage ping
 
 The usage ping is opt-in. A production server asks once after sign-in (`src/app/(app)/usage-ping-dialog.tsx`, shown by the signed-in layout while nobody has answered and `DOSSIER_TELEMETRY` isn't set) and sends nothing before a yes. After one, on each day someone signed in opens a page, it sends `https://telemetry.dossier.aien.me/ping` the install's random ID and the version, once (`src/lib/usage-ping.ts`, called with `after()` from the signed-in layout). `DOSSIER_TELEMETRY=on` or `off` answers in advance and wins while it's set.
@@ -265,13 +277,37 @@ The backend is the project's own service and isn't published with the app. `src/
 A production server asks `https://api.dossier.aien.me/v1`. A development server only asks while `DOSSIER_API_URL` is set, and then on every page, so a change shows without the wait: the first reload asks, and the next one shows it. To try it against a local copy of the backend, set that variable, for example in an untracked `compose.override.yml`. The variable isn't in `.env.example` or `compose.production.yml`, because nobody running the image needs it. `e2e/announcements.spec.ts` points it at the fake job sources.
 ## The desktop app
 
-`desktop/` is the app for Linux and Windows, built with Electron. One download, two modes, chosen on first launch: **On my server** opens the user's own Dossier in a window, and **On this computer** runs Dossier itself. There's no auto-update: people download each new version from the release page.
+`desktop/` is the app for Linux, Windows, and macOS, built with Electron. One app, two modes, chosen on first launch: **On my server** opens the user's own Dossier in a window, and **On this computer** runs Dossier itself. There is no auto-update. Developer macOS builds are unsigned and not notarized; Gatekeeper may block the first launch. In that case, control-click the app and choose **Open**, then confirm, or allow it under **System Settings → Privacy & Security**.
 
 It has its own `package.json` and `yarn.lock`, so the image doesn't carry Electron.
 
 The window has no title bar or menu row of the system's. `desktop/bar/` is the app's own top bar, with the system's window buttons drawn over it, and the page is a view below it, so no server version has to know about the bar. The bar takes its colours from the page's `body` (`bar-colors.ts`), read again when the page loads and when the `dossier_theme` cookie changes.
 
-On this computer runs the same standalone server as the image, on a plain Node binary that ships inside the app, and on SQLite in the user's app folder. So nothing native is built for Electron, and an Electron update, which is how Chromium's security fixes arrive, can't be held back by it. `desktop/scripts/prepare-server.mjs` puts it together for one platform, checking every download against a pinned hash, and the app's own Chromium prints the PDFs (`print-service.ts`, `src/lib/pdf/desktop-print.ts`). The server listens on 127.0.0.1 only. The app makes a secret on first launch and a token at each launch, and signs itself in with the token (`src/lib/desktop.ts`): there's no password, but the sign-in page stays, so other programs reaching the port get nowhere.
+On this computer runs the same standalone server as the image, on a plain Node binary that ships inside the app, and on SQLite in the user's app folder. So nothing native is built for Electron, and an Electron update, which is how Chromium's security fixes arrive, can't be held back by it. `desktop/scripts/prepare-server.mjs` puts it together for one platform and architecture, checking every download against a pinned hash (x64 remains the default for Linux and Windows), and the app's own Chromium prints the PDFs (`print-service.ts`, `src/lib/pdf/desktop-print.ts`). The server listens on 127.0.0.1 only. The app makes a secret on first launch and a token at each launch, and signs itself in with the token (`src/lib/desktop.ts`): there's no password, but the sign-in page stays, so other programs reaching the port get nowhere.
+
+### Build and run on macOS
+
+Build for the Mac architecture you intend to run. Apple Silicon uses `arm64`; Intel uses `x64`. Under Rosetta, `uname -m` can report `x86_64` on an Apple Silicon Mac, so check `node -p 'process.arch'` (or `sysctl hw.optional.arm64`) instead. Install Node.js 24.x and enable Corepack first (`corepack enable`). The root and desktop packages are separate Yarn projects, so install each in its own directory. From the repository root:
+
+```bash
+yarn install
+yarn generate
+yarn build
+yarn build:desktop-seed
+```
+
+Then prepare the standalone server for the target architecture, and package the unsigned app. Run the matching block from `desktop/`:
+
+```bash
+cd desktop
+yarn install
+yarn prepare-server --platform darwin --arch arm64
+CSC_IDENTITY_AUTO_DISCOVERY=false yarn package:mac:arm64
+```
+
+For an Intel Mac, use `--arch x64` and `CSC_IDENTITY_AUTO_DISCOVERY=false yarn package:mac:x64` instead. Disabling automatic identity discovery keeps the developer build unsigned even on a Mac with a signing identity installed. The preparation step downloads the Node 24 runtime and SQLite native module for the target and verifies both against pinned SHA-256 hashes. The pack step rejects a mismatch between that runtime and Electron's target. Output is in `desktop/release/`, for example `Dossier-1.13.0-mac-arm64.dmg` and `.zip` (or `Dossier-1.13.0-mac-x64` for Intel).
+
+To install, open the DMG and drag **Dossier** to Applications. To run the unpacked build directly, open `desktop/release/mac-arm64/Dossier.app` (or `mac/Dossier.app` for x64). On first launch choose **On this computer** to create a local SQLite-backed profile, or **On my server** and enter the URL of your Dossier server. Quit with **Dossier → Quit Dossier** or `⌘Q`; local data remains in the app's user data folder.
 
 Migrations run without Prisma's tools (`server-tools/migrate.mjs`) and **not in a transaction**, because SQLite ignores the files' `PRAGMA foreign_keys=OFF` inside one, and rebuilding a table would then delete the rows that point at it. It copies the database first, and refuses a database from a newer version.
 
