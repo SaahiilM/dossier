@@ -21,15 +21,15 @@ export function PageHeader({ title, description, actions, before }: PageHeaderPr
   return (
     <>
       <PageBar>
-        <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
+        <div className="flex min-w-0 basis-full items-center gap-2 md:basis-auto md:flex-1 sm:gap-3">
           {before ?? <PageBarIcon />}
-          <h1 className="font-serif text-title text-pretty">{title}</h1>
+          <h1 className="min-w-0 break-words font-serif text-[28px] leading-tight sm:text-title text-pretty">{title}</h1>
         </div>
-        {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
+        {actions && <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">{actions}</div>}
       </PageBar>
       {/* The screen's content starts 32px under the bar, after the description if there is one. */}
       {description ? (
-      <p className="max-w-[620px] px-4 pt-1 pb-6 text-lead text-pretty text-muted sm:px-10 sm:pb-8">{description}</p>
+        <p className="max-w-[620px] px-4 pt-1 pb-6 text-lead text-pretty text-muted sm:px-10 sm:pb-8">{description}</p>
       ) : (
         <div aria-hidden="true" className="h-8" />
       )}

@@ -125,20 +125,29 @@ export function ProfileEditor({ initial, section, order, sections }: { initial: 
         }
       />
 
-      <div className="flex flex-wrap items-start gap-x-12 gap-y-10 px-10 pt-2 pb-20">
-        <div className="flex max-w-[260px] min-w-[220px] flex-[1_1_240px] flex-col gap-6">
+      <div className="flex flex-col items-stretch gap-6 px-4 pt-2 pb-20 md:flex-row md:flex-wrap md:items-start md:gap-x-12 md:gap-y-10 md:px-10">
+        <div className="flex min-w-0 flex-col gap-4 md:max-w-[260px] md:min-w-[220px] md:flex-[1_1_240px] md:gap-6">
           <StrengthMeter profile={profile} />
+          <label className="flex flex-col gap-2 text-sm md:hidden">
+            Profile section
+            <select value={section} onChange={(event) => router.push(sectionHref(event.target.value as ProfilePage))} className="min-h-11 w-full rounded-control border border-line bg-surface px-3 text-base text-ink">
+              {nav.map((entry) => <option key={entry.id} value={entry.id}>{entry.label}</option>)}
+              <option value="new">+ Add a section</option>
+            </select>
+          </label>
+          <div className="hidden md:block">
           <SectionNav
             rows={nav.map((entry) => ({ ...entry, count: customOf(entry.id)?.items.length.toString() ?? counts[entry.id as SectionId] }))}
             current={section}
             onMove={(rows) => void moveRows(rows)}
           />
-          <p className="text-label text-pretty text-muted">
+          </div>
+          <p className="hidden text-label text-pretty text-muted md:block">
             Drag to reorder. Resumes use this order unless one has its own, and two-column themes keep some sections in the sidebar.
           </p>
         </div>
 
-        <div className="flex max-w-[760px] min-w-0 flex-[999_1_420px] flex-col gap-6">
+        <div className="flex w-full min-w-0 max-w-[760px] flex-col gap-6 md:w-auto md:flex-[999_1_420px]">
           {section === "new" ? (
             <>
               <div className="flex flex-col gap-1.5">
