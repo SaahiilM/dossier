@@ -1,6 +1,7 @@
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { saveSettings } from "@/lib/settings-data";
+import { PROVIDER_DEFAULTS_STUB } from "@/test/ai-config-mock";
 import { createTestClient, resetDatabase } from "@/test/db";
 
 import { countAgentQueue, loadAgentView } from "./view";
@@ -20,7 +21,10 @@ vi.mock("./scan-lock", async (original) => {
 // Settings → Scoring reads DOSSIER_SCORER (#274).
 vi.mock("@/lib/env", () => ({ env: { DOSSIER_SECRET: "a".repeat(32) } }));
 vi.mock("@/lib/time-zone", () => ({ lastKnownTimeZone: async () => "Europe/Berlin" }));
-vi.mock("@/lib/ai/config", () => ({ isAiConfigured: async () => true }));
+vi.mock("@/lib/ai/config", () => ({
+  isAiConfigured: async () => true,
+  PROVIDER_DEFAULTS: PROVIDER_DEFAULTS_STUB,
+}));
 vi.mock("@/lib/job-search/config", () => ({
   loadJobSearchConfig: async () => ({ source: "JSEARCH", saved: true, jsearch: { key: "k", host: "openwebninja", keyState: "set" }, adzuna: { appId: "", key: null, keyState: "none" } }),
   credentialsFor: () => ({ key: "k", host: "openwebninja" }),

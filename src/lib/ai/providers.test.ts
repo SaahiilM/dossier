@@ -150,7 +150,10 @@ describe("OpenAICompatibleProvider", () => {
     for (const url of ["https://openrouter.ai/api/v1", "https://example.com/v1"]) {
       await new OpenAICompatibleProvider("OPENAI", url, "sk", "openai/gpt-6.1-terra", 60_000).complete({ ...ask, schema: Person });
     }
-    expect(requests.map((request) => (request.body as Record<string, unknown>).provider)).toEqual([{ data_collection: "deny" }, undefined]);
+    expect(requests.map((request) => (request.body as Record<string, unknown>).provider)).toEqual([
+      { data_collection: "deny", require_parameters: true },
+      undefined,
+    ]);
   });
 
   it("puts the schema in the prompt for Ollama's cloud, which takes response_format without holding answers to it (#276)", async () => {

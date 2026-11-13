@@ -8,6 +8,8 @@ export const USAGE_TASKS = [
   { task: "extract-profile", label: "Importing a profile", hint: "A resume read into your profile" },
   { task: "score-posting", label: "Scoring postings", hint: "Score in Find jobs, and the job agent" },
   { task: "score-posting-jev", label: "Scoring postings with Jev", hint: "The same, by TypeSafe's Jev" },
+  { task: "score-posting-openrouter", label: "Scoring postings with an OpenRouter chat model", hint: "The same, by your OpenRouter chat model" },
+  { task: "score-posting-openrouter-decisions", label: "Scoring postings with an OpenRouter decision model", hint: "The same questions as Jev, answered by the decision model" },
   { task: "extract-posting", label: "Reading postings", hint: "What a posting asks for, when you start an application" },
   { task: "match-requirements", label: "Matching requirements", hint: "Your profile against what a posting asks for" },
   { task: "tailor-resume", label: "Writing resumes", hint: "Each application's tailored resume" },

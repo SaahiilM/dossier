@@ -52,7 +52,7 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
     <SettingsScreen section={section}>
       {section === "ai" ? (
         <>
-          <AiProviderSection initial={await loadAiSettingsView()} />
+          <AiProviderSection initial={await loadAiSettingsView()} inDesktopApp={isDesktopApp()} />
           <AiBehaviour initial={{ creativity: settings.creativity, strict: settings.strict, showDiff: settings.showDiff }} />
         </>
       ) : section === "jobs" ? (

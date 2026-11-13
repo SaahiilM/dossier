@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -12,13 +12,21 @@ import { toastResult } from "@/components/toast";
 import type { AiErrorKind } from "@/lib/ai/errors";
 import { AI_CHOICES, AI_PRIORITIES, aiChoice, type AiChoice, type AiChoiceId, type AiPriority } from "@/lib/setup/ai-choices";
 
-import { saveAiProvider } from "../../(app)/settings/actions";
+import { saveAiProvider, saveChatGptAccountSub, testAiConnection } from "../../(app)/settings/actions";
+import { SubscriptionProviderSection } from "../../(app)/settings/subscription-provider-section";
 import { connectAi, findLocalAi } from "./actions";
 import { ChoiceCards } from "./choice-cards";
 import { InstructionList } from "./instruction-list";
 
 /** What the step starts from: the AI in effect, if it works. */
-export type AiStepView = { usable: boolean; name: string; model: string; choice: AiChoiceId | null; fromEnv: boolean };
+export type AiStepView = {
+  usable: boolean;
+  name: string;
+  model: string;
+  choice: AiChoiceId | null;
+  chatGptAccountSub: string;
+  fromEnv: boolean;
+};
 
 type Status =
   | { state: "idle" }
@@ -49,7 +57,7 @@ function hint(kind: AiErrorKind, choice: AiChoice): string | null {
  * for it, then that choice's steps, its key and a check that says in plain
  * words what went wrong. Local ones are found on this computer instead.
  */
-export function AiStep({ current }: { current: AiStepView }) {
+export function AiStep({ current, inDesktopApp = false }: { current: AiStepView; inDesktopApp?: boolean }) {
   const router = useRouter();
   const [changing, setChanging] = useState(!current.usable);
   const [priority, setPriority] = useState<AiPriority | null>(current.choice ? aiChoice(current.choice).priority : null);
@@ -111,15 +119,44 @@ export function AiStep({ current }: { current: AiStepView }) {
         </section>
       )}
 
-      {choiceId && <ChoicePanel key={choiceId} choice={aiChoice(choiceId)} onConnected={() => router.refresh()} />}
+      {choiceId && (
+        <ChoicePanel
+          key={choiceId}
+          choice={aiChoice(choiceId)}
+          chatGptAccountSub={current.chatGptAccountSub}
+          savedModel={current.choice === choiceId ? current.model : ""}
+          inDesktopApp={inDesktopApp}
+          onConnected={() => router.refresh()}
+        />
+      )}
     </div>
   );
 }
 
-function ChoicePanel({ choice, onConnected }: { choice: AiChoice; onConnected: () => void }) {
+function ChoicePanel({
+  choice,
+  chatGptAccountSub,
+  savedModel,
+  inDesktopApp,
+  onConnected,
+}: {
+  choice: AiChoice;
+  chatGptAccountSub: string;
+  savedModel: string;
+  inDesktopApp: boolean;
+  onConnected: () => void;
+}) {
   const [key, setKey] = useState("");
   const [status, setStatus] = useState<Status>({ state: "idle" });
-  const local = choice.key === null;
+  const [model, setModel] = useState(savedModel);
+  const local = choice.key === null && !choice.subscription;
+  const subscriptionTab = choice.id === "claude_cli" ? "claude" : "chatgpt";
+
+  useEffect(() => {
+    if (!choice.subscription) return;
+    setModel(savedModel);
+    void saveAiProvider({ provider: choice.provider, baseUrl: "", model: savedModel });
+  }, [choice.id, choice.provider, choice.subscription, savedModel]);
 
   const check = async () => {
     setStatus({ state: "checking" });
@@ -128,6 +165,18 @@ function ChoicePanel({ choice, onConnected }: { choice: AiChoice; onConnected: (
       if (!result.ok) return setStatus({ state: "idle" });
       setStatus(result.data.found ? { state: "found", ...result.data } : { state: "missing" });
       if (result.data.found && result.data.model) onConnected();
+      return;
+    }
+    if (choice.subscription) {
+      if (model.trim() && toastResult(await saveAiProvider({ provider: choice.provider, baseUrl: "", model: model.trim() })).ok) {
+        onConnected();
+      }
+      const result = await testAiConnection({});
+      if (!result.ok) return setStatus({ state: "idle" });
+      if (result.data.connected) {
+        setStatus({ state: "connected", model: result.data.model, seconds: result.data.seconds });
+        onConnected();
+      } else setStatus({ state: "failed", kind: "auth", message: result.data.message });
       return;
     }
     const result = toastResult(await connectAi({ choice: choice.id, key: key.trim() || undefined }));
@@ -141,10 +190,15 @@ function ChoicePanel({ choice, onConnected }: { choice: AiChoice; onConnected: (
     }
   };
 
-  const chooseModel = async (model: string) => {
+  const chooseModel = async (next: string) => {
     if (status.state !== "found") return;
-    setStatus({ ...status, model });
-    if (toastResult(await saveAiProvider({ provider: choice.provider, baseUrl: status.baseUrl, model })).ok) onConnected();
+    setStatus({ ...status, model: next });
+    if (toastResult(await saveAiProvider({ provider: choice.provider, baseUrl: status.baseUrl, model: next })).ok) onConnected();
+  };
+
+  const saveModel = async (next: string) => {
+    setModel(next);
+    if (toastResult(await saveAiProvider({ provider: choice.provider, baseUrl: "", model: next })).ok) onConnected();
   };
 
   return (
@@ -165,7 +219,23 @@ function ChoicePanel({ choice, onConnected }: { choice: AiChoice; onConnected: (
         <dt className="font-medium">Your data</dt>
         <dd className="text-pretty text-muted">{choice.data}</dd>
       </dl>
-      <InstructionList steps={choice.steps} label={`Setting up ${choice.name}`} />
+      {!choice.subscription && <InstructionList steps={choice.steps} label={`Setting up ${choice.name}`} />}
+
+      {choice.subscription && (
+        <SubscriptionProviderSection
+          compact
+          tab={subscriptionTab}
+          inDesktopApp={inDesktopApp}
+          chatGptModel={choice.id === "chatgpt_subscription" ? model : ""}
+          claudeModel={choice.id === "claude_cli" ? model : ""}
+          chatGptAccountSub={chatGptAccountSub}
+          onChatGptModelChange={(value) => void saveModel(value)}
+          onClaudeModelChange={(value) => void saveModel(value)}
+          onChatGptAccountSubChange={(sub) => {
+            void saveChatGptAccountSub({ sub });
+          }}
+        />
+      )}
 
       <form
         className="flex flex-col gap-3"
@@ -220,9 +290,9 @@ function ChoicePanel({ choice, onConnected }: { choice: AiChoice; onConnected: (
             <div className="flex flex-col gap-3">
               <p className="text-success">Found {choice.name}. Dossier will write with the model below.</p>
               <Select label="Model" value={status.model ?? ""} onChange={(event) => void chooseModel(event.target.value)} className="max-w-[420px]">
-                {status.models.map((model) => (
-                  <option key={model} value={model}>
-                    {model}
+                {status.models.map((entry) => (
+                  <option key={entry} value={entry}>
+                    {entry}
                   </option>
                 ))}
               </Select>

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { demoProfile, demoResumeUnits } from "@/lib/demo-profile";
 import type { ProfileData } from "@/lib/profile";
+import { emptyWorkAuthorization } from "@/lib/work-authorization";
 
 import { contactItems, displayLink, resumeContent, sectionsWithContent } from "./resume-content";
 
@@ -77,6 +78,7 @@ describe("resumeContent", () => {
       references: [],
       customSections: [],
       facts: [],
+      workAuthorization: emptyWorkAuthorization(),
       photo: null,
     };
     expect(resumeContent(empty)).toEqual({

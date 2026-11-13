@@ -22,6 +22,7 @@ describe("resolveAiConfig", () => {
       apiKey: null,
       apiKeyProblem: null,
       timeoutMs: 300_000,
+      chatGptAccountSub: null,
     });
   });
 
@@ -81,12 +82,15 @@ describe("resolveAiConfig", () => {
 
 describe("createProvider", () => {
   it("picks the implementation for the provider", () => {
-    const base = { baseUrl: "http://x", model: "m", apiKey: "k", apiKeyProblem: null, timeoutMs: 1000 };
+    const base = { baseUrl: "http://x", model: "m", apiKey: "k", apiKeyProblem: null, timeoutMs: 1000, chatGptAccountSub: null };
     expect(createProvider({ ...base, provider: "LOCAL" }).kind).toBe("LOCAL");
     expect(createProvider({ ...base, provider: "OPENAI" }).kind).toBe("OPENAI");
     expect(createProvider({ ...base, provider: "ANTHROPIC" }).kind).toBe("ANTHROPIC");
     expect(createProvider({ ...base, provider: "MISTRAL" }).kind).toBe("MISTRAL");
     expect(createProvider({ ...base, provider: "LMSTUDIO" }).kind).toBe("LMSTUDIO");
+    expect(createProvider({ ...base, provider: "OPENROUTER" }).kind).toBe("OPENROUTER");
+    expect(createProvider({ ...base, provider: "CHATGPT_SUBSCRIPTION", chatGptAccountSub: "sub-1" }).kind).toBe("CHATGPT_SUBSCRIPTION");
+    expect(createProvider({ ...base, provider: "CLAUDE_CLI" }).kind).toBe("CLAUDE_CLI");
   });
 });
 
@@ -108,5 +112,17 @@ describe("isAiUsable (#221)", () => {
     expect(await usable({ provider: "ANTHROPIC" })).toBe(false);
     expect(await usable({ provider: "ANTHROPIC", apiKeyEnc: encryptApiKey("sk-saved") })).toBe(true);
     expect(await usable({ provider: "MISTRAL", apiKeyEnc: encryptApiKey("sk", "b".repeat(32)) })).toBe(false);
+    expect(await usable({ provider: "OPENROUTER", model: "openai/gpt-4.1-mini" })).toBe(false);
+    expect(await usable({ provider: "OPENROUTER", model: "openai/gpt-4.1-mini", apiKeyEnc: encryptApiKey("sk-or-test") })).toBe(true);
+  });
+});
+
+describe("resolveAiConfig (OpenRouter)", () => {
+  it("knows OpenRouter's address", () => {
+    expect(resolveAiConfig(nothingSaved, { DOSSIER_AI_PROVIDER: "openrouter", DOSSIER_AI_KEY: "sk-or" })).toMatchObject({
+      provider: "OPENROUTER",
+      baseUrl: "https://openrouter.ai/api/v1",
+      apiKey: "sk-or",
+    });
   });
 });

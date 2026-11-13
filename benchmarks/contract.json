@@ -1,0 +1,32 @@
+{
+  "checkedAt": "2026-11-12",
+  "requestModel": "perplexity/pplx-decider-v1.3:free",
+  "canonicalSnapshot": "perplexity/pplx-decider-v1.3-20261112",
+  "unlistedPin": "perplexity/pplx-decider-v1.3-20261112:free",
+  "unlistedPinReason": "GET /api/v1/models?output_modalities=decisions lists id perplexity/pplx-decider-v1.3:free with canonical_slug perplexity/pplx-decider-v1.3-20261112. It does not list perplexity/pplx-decider-v1.3-20261112:free. The harness sends the listed free id and stops when the response model is a different build.",
+  "catalogList": "https://openrouter.ai/api/v1/models?output_modalities=decisions",
+  "endpointsUrl": "https://openrouter.ai/api/v1/models/perplexity/pplx-decider-v1.3:free/endpoints",
+  "decisionsUrl": "https://openrouter.ai/api/alpha/decisions",
+  "decisionsDocs": "https://openrouter.ai/docs/api/api-reference/alphadecisions/submit-a-decisions-request",
+  "modelPage": "https://openrouter.ai/perplexity/pplx-decider-v1.3:free",
+  "modelsFile": "models.json",
+  "method": "POST",
+  "modality": "decisions",
+  "notChat": true,
+  "bodyFields": ["model", "state", "questions", "provider"],
+  "provider": { "allow_fallbacks": false },
+  "webGrounding": false,
+  "stopWhenCostUsdAbove": 0,
+  "pricing": { "prompt": "0", "completion": "0" },
+  "contextLength": 262144,
+  "providerName": "Perplexity",
+  "outputModalities": ["decisions"],
+  "usageFields": {
+    "input": "usage.input_tokens",
+    "output": "usage.output_tokens",
+    "cached": "usage.input_tokens_details.cached_tokens",
+    "reasoning": "usage.output_tokens_details.reasoning_tokens",
+    "cost": "usage.cost"
+  },
+  "reasoningNote": "The Decisions usage schema requires input_tokens and output_tokens. cached_tokens is optional. reasoning_tokens is not a required Decisions field. The harness stores it only when output_tokens_details.reasoning_tokens is present. A missing value stays null."
+}

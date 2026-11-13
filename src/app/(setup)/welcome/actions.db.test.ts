@@ -60,6 +60,11 @@ describe("the setup guide's AI step (E21-2)", () => {
     expect(await connectAi({ choice: "anthropic" })).toMatchObject({ ok: true, data: { connected: true, model: "claude-sonnet-5-5" } });
   });
 
+  it("refuses subscription choices that use sign-in instead of a key", async () => {
+    expect(await connectAi({ choice: "chatgpt_subscription" })).toMatchObject({ ok: false });
+    expect(await connectAi({ choice: "claude_cli" })).toMatchObject({ ok: false });
+  });
+
   it("never sends another provider's key: it asks for one and changes nothing", async () => {
     await connectAi({ choice: "openai", key: "sk-openai" });
     const calls = ai.configs.length;

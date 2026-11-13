@@ -4,20 +4,37 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { ScoringView } from "@/lib/scoring/scorers";
 
-import { saveScorer, saveTypesafeKey, testJev } from "./actions";
+import { saveScorer, saveTypesafeKey, testJev, testOpenRouterDecisions } from "./actions";
 import { ScoringSection } from "./scoring-section";
 
-vi.mock("./actions", () => ({ saveScorer: vi.fn(), saveTypesafeKey: vi.fn(), testJev: vi.fn() }));
+vi.mock("./actions", () => ({
+  saveScorer: vi.fn(),
+  saveTypesafeKey: vi.fn(),
+  testJev: vi.fn(),
+  listOpenRouterScoringModels: vi.fn(async () => ({ ok: true, data: { models: [], problem: null } })),
+  listOpenRouterDecisionModels: vi.fn(async () => ({ ok: true, data: { models: ["perplexity/pplx-decider-v1.3:free"], problem: null } })),
+  saveOpenRouterScoringKey: vi.fn(),
+  saveOpenRouterScoringModel: vi.fn(),
+  testOpenRouterScoring: vi.fn(),
+  testOpenRouterDecisions: vi.fn(),
+}));
+vi.mock("@/hooks/use-autosave", () => ({
+  useAutosave: () => ({ status: "idle" as const, savedAt: null, flush: () => {} }),
+}));
 vi.mock("@/components/toast", () => ({ toast: vi.fn(), toastResult: (result: unknown) => result }));
 
-const ai: ScoringView = { scorer: "AI", keyState: "none" };
-const jev: ScoringView = { scorer: "JEV", keyState: "none" };
+const emptyOpenRouter = { openRouterKeyState: "none" as const, openRouterModel: "" };
+const ai: ScoringView = { scorer: "AI", keyState: "none", ...emptyOpenRouter };
+const jev: ScoringView = { scorer: "JEV", keyState: "none", ...emptyOpenRouter };
 
 beforeEach(() => {
-  vi.mocked(saveScorer).mockReset().mockImplementation(async ({ scorer }) => ({ ok: true, data: { scorer, keyState: "none" } }));
+  vi.mocked(saveScorer).mockReset().mockImplementation(async ({ scorer }) => ({ ok: true, data: { scorer, keyState: "none", ...emptyOpenRouter } }));
   vi.mocked(saveTypesafeKey)
     .mockReset()
-    .mockImplementation(async ({ change }) => ({ ok: true, data: { scorer: "JEV", keyState: change.action === "set" ? "set" : "none" } }));
+    .mockImplementation(async ({ change }) => ({
+      ok: true,
+      data: { scorer: "JEV", keyState: change.action === "set" ? "set" : "none", ...emptyOpenRouter },
+    }));
   vi.mocked(testJev).mockReset().mockResolvedValue({ ok: true, data: { connected: true, model: "jev-1.14.0", seconds: 0.4 } });
 });
 
@@ -25,7 +42,12 @@ describe("ScoringSection (#274)", () => {
   it("offers the AI model and Jev, the AI model by default, with nothing about TypeSafe", () => {
     render(<ScoringSection initial={ai} />);
     expect(screen.getByRole("heading", { name: "Scoring" })).toBeInTheDocument();
-    expect(screen.getAllByRole("radio").map((radio) => radio.getAttribute("aria-label"))).toEqual(["Your AI model", "Jev by TypeSafe"]);
+    expect(screen.getAllByRole("radio").map((radio) => radio.getAttribute("aria-label"))).toEqual([
+      "Your AI model",
+      "Jev by TypeSafe",
+      "OpenRouter decision model",
+      "OpenRouter chat model",
+    ]);
     expect(screen.getByRole("radio", { name: "Your AI model" })).toBeChecked();
     expect(screen.queryByRole("note")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("TypeSafe key")).not.toBeInTheDocument();
@@ -53,15 +75,15 @@ describe("ScoringSection (#274)", () => {
   });
 
   it("names the environment's key, and says when the saved one can't be read", () => {
-    const { unmount } = render(<ScoringSection initial={{ scorer: "JEV", keyState: "env" }} />);
+    const { unmount } = render(<ScoringSection initial={{ scorer: "JEV", keyState: "env", ...emptyOpenRouter }} />);
     expect(screen.getByLabelText("TypeSafe key")).toHaveAttribute("placeholder", "Using DOSSIER_TYPESAFE_KEY · type one to save it here");
     unmount();
-    render(<ScoringSection initial={{ scorer: "JEV", keyState: "unreadable" }} />);
+    render(<ScoringSection initial={{ scorer: "JEV", keyState: "unreadable", ...emptyOpenRouter }} />);
     expect(screen.getByText("Your saved key can't be read. Please enter it again.")).toBeInTheDocument();
   });
 
   it("tests the connection and shows Jev's version, or what went wrong", async () => {
-    render(<ScoringSection initial={{ scorer: "JEV", keyState: "set" }} />);
+    render(<ScoringSection initial={{ scorer: "JEV", keyState: "set", ...emptyOpenRouter }} />);
     expect(screen.getByRole("status")).toHaveTextContent("Not tested since your last change · a test costs a few dozen tokens");
     await userEvent.click(screen.getByRole("button", { name: "Test connection" }));
     await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Connected · jev-1.14.0 answered in 0.4 s"));
@@ -80,5 +102,19 @@ describe("ScoringSection (#274)", () => {
     await userEvent.click(screen.getByRole("radio", { name: "Your AI model" }));
     expect(saveScorer).toHaveBeenCalledWith({ scorer: "AI" });
     expect(screen.queryByLabelText("TypeSafe key")).not.toBeInTheDocument();
+  });
+
+  it("offers the OpenRouter decision model and tests it on the decision protocol", async () => {
+    vi.mocked(testOpenRouterDecisions).mockResolvedValue({
+      ok: true,
+      data: { connected: true, model: "perplexity/pplx-decider-v1.3-20261112", seconds: 0.2 },
+    });
+    render(<ScoringSection initial={{ scorer: "OPENROUTER_DECISIONS", keyState: "none", openRouterKeyState: "set", openRouterModel: "perplexity/pplx-decider-v1.3:free" }} />);
+    expect(screen.getByRole("radio", { name: "OpenRouter decision model" })).toBeChecked();
+    expect(await screen.findByRole("option", { name: "perplexity/pplx-decider-v1.3:free" })).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("one short decision question");
+    await userEvent.click(screen.getByRole("button", { name: "Test connection" }));
+    expect(testOpenRouterDecisions).toHaveBeenCalledWith({});
+    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Connected · perplexity/pplx-decider-v1.3-20261112 answered in 0.2 s"));
   });
 });

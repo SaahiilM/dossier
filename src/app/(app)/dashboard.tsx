@@ -87,7 +87,7 @@ export function Dashboard({
  */
 function Columns({ calendar, children }: { calendar?: ReactNode; children: ReactNode }) {
   return (
-    <div className="@container px-10 pb-[72px]">
+    <div className="@container px-4 pb-8 sm:px-10 sm:pb-[72px]">
       <div className="grid grid-cols-[minmax(0,1fr)] items-start gap-5 @min-[1240px]:grid-cols-[minmax(0,1200px)_400px]">
         {children}
         {calendar && <div className="min-w-0 @min-[780px]:max-w-[calc(50%-10px)] @min-[1240px]:max-w-none">{calendar}</div>}

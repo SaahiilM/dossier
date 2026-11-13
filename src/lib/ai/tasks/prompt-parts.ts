@@ -3,6 +3,8 @@ import type { Extracted, Match } from "@/lib/application-data";
 import { citationText } from "@/lib/citation";
 import { factTexts, formatDateRange, formatMonthYear, languageLevelLabel, resumeCertifications, resumeCustomSections, resumePublications, type ProfileData } from "@/lib/profile";
 
+import type { UsageTask } from "@/lib/usage";
+
 import type { AIProvider } from "../provider";
 
 /** A bullets field as lines, without its **bold** marks (#368). */
@@ -23,6 +25,8 @@ export type TaskOptions = {
   /** SET-7: the language to write in, e.g. "Dutch"; the posting's language decides when null. */
   language: string | null;
   signal?: AbortSignal;
+  /** When a task reuses another scorer's prompt, e.g. OpenRouter judging. */
+  usageTask?: UsageTask;
 };
 
 /** A task's output, with the prompt version to save next to it. */

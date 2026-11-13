@@ -64,7 +64,7 @@ describe("a resume's own headings", () => {
 
 describe("profileRows", () => {
   it("starts with Basics first and the Facts last, around the resume's order", () => {
-    expect(profileRows(DEFAULT_SECTION_LAYOUT.order)).toEqual(["basics", ...BUILT_IN_SECTIONS, "facts"]);
+    expect(profileRows(DEFAULT_SECTION_LAYOUT.order)).toEqual(["basics", ...BUILT_IN_SECTIONS, "workAuthorization", "facts"]);
   });
 
   it("follows the resume's order, with new custom sections above References", () => {
