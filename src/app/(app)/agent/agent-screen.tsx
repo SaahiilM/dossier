@@ -105,7 +105,7 @@ export function AgentScreen({ view }: { view: AgentView }) {
       <div className="flex flex-col gap-8 px-4 pb-20 sm:px-10">
         <Notices view={view} />
 
-        <Card padding="none" className="px-7 py-2">
+        <Card padding="none" className="px-4 py-2 sm:px-7">
           <dl>
             <Fact label="Agent">{view.enabled ? "Enabled" : "Off"}</Fact>
             <Fact label="Enabled searches">{view.searches.filter((search) => search.enabled).length} of {view.searches.length}</Fact>
@@ -130,7 +130,7 @@ export function AgentScreen({ view }: { view: AgentView }) {
           )}
         </Card>
 
-        <Card padding="none" className="flex flex-col gap-4 px-7 py-5">
+        <Card padding="none" className="flex flex-col gap-4 px-4 py-4 sm:px-7 sm:py-5">
           <div className="flex flex-wrap items-baseline justify-between gap-2">
             <h2 className="font-serif text-section">Recurring searches</h2>
             <Link href="/settings?section=agent" className="text-meta text-muted underline underline-offset-2">Manage searches and shared schedule</Link>
@@ -315,7 +315,7 @@ function OpenPosting({ url }: { url: string }) {
 /** A posting the agent found: what it is, its score and why. The actions go below. */
 function CandidateCard({ candidate, children }: { candidate: AgentCandidateView; children: ReactNode }) {
   return (
-    <Card padding="none" className="flex flex-col gap-3.5 px-6 py-5">
+    <Card padding="none" className="flex flex-col gap-3.5 px-4 py-4 sm:px-6 sm:py-5">
       <div className="flex items-start justify-between gap-4">
         <div className="flex min-w-0 flex-col gap-0.5">
           <h3 className="font-serif text-[20px] leading-tight text-pretty">{candidate.title}</h3>

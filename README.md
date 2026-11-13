@@ -131,7 +131,7 @@ The [wiki](https://github.com/AienTech/dossier/wiki) has what comes after instal
 
 ## Known limitations
 
-- **Desktop only:** made for a laptop or desktop browser, not for phones.
+- **Mobile companion:** the dashboard, applications and job-agent review have phone-friendly layouts and the site can be added to an iPhone Home Screen. The broader editing workflows are still designed for a laptop or desktop browser.
 - **Single user:** one password and one profile; there are no accounts.
 - **English interface:** the app itself is in English. Documents can be written in other languages; in the 21 built-in ones, their headings, dates and language levels are in that language too, and in one added with **Other language…** those stay in English.
 - **One instance:** run a single copy of the app per database. The nightly backups, the AI job queue and the PDF browser live inside the app's process.

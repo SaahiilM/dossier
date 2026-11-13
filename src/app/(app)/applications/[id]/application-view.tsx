@@ -707,7 +707,7 @@ export function ApplicationView({
         }
       >
         {/* Its underline runs the header's full width, under the padding too. */}
-        <TabsList aria-label="Application" className="-mx-10 px-10">
+        <TabsList aria-label="Application" className="-mx-4 overflow-x-auto px-4 sm:-mx-10 sm:overflow-visible sm:px-10">
           <TabsTrigger value="resume">Resume</TabsTrigger>
           <TabsTrigger value="letter">Cover letter</TabsTrigger>
           <TabsTrigger value="email">Email</TabsTrigger>

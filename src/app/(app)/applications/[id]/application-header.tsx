@@ -40,7 +40,7 @@ export function ApplicationHeader({
         </div>
         <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div>
       </PageBar>
-      <div className="flex flex-col gap-[18px] border-b border-line px-10 pt-5">
+      <div className="flex flex-col gap-3 border-b border-line px-4 pt-4 sm:gap-[18px] sm:px-10 sm:pt-5">
         {meta.length > 0 && (
           <p className="flex flex-wrap gap-x-4 gap-y-1 text-[13.5px] text-muted">
             {meta.map((part) => (

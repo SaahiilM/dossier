@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { cookies } from "next/headers";
 import { connection } from "next/server";
 
@@ -11,6 +11,19 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: { default: "Dossier", template: "%s · Dossier" },
   description: "Your job search, on your server.",
+  appleWebApp: {
+    capable: true,
+    title: "Dossier",
+    statusBarStyle: "default",
+  },
+};
+
+export const viewport: Viewport = {
+  viewportFit: "cover",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#eeebe4" },
+    { media: "(prefers-color-scheme: dark)", color: "#1a1917" },
+  ],
 };
 
 export default async function RootLayout({ children }: LayoutProps<"/">) {

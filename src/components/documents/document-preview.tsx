@@ -108,7 +108,7 @@ export function DocumentPreview({
   return (
     <div
       className={cn(
-        "@container flex min-w-0 flex-[999_1_480px] flex-col items-center overflow-auto bg-canvas px-10 pt-10 pb-16",
+        "@container flex min-w-0 flex-[999_1_480px] flex-col items-center overflow-auto bg-canvas px-3 pt-5 pb-20 sm:px-10 sm:pt-10 sm:pb-16",
         className,
       )}
     >
