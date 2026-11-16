@@ -22,7 +22,7 @@ export async function attributeAgentCandidates(search: { id: string; name: strin
     // search edits, import and wipe. No source calls happen under this lock.
     await lockAgentSearches(tx);
     if (!await tx.agentSearch.findUnique({ where: { id: search.id } })) return;
-    const states = await postingStates(postings, tx);
+    const states = await postingStates(postings, tx, { withScores: false });
     const eligible = postings.filter((posting) => {
       const state = states.get(postingKey(posting));
       return !state?.saved && !state?.dismissed && !state?.applicationId;
@@ -37,7 +37,7 @@ export async function attributeAgentCandidates(search: { id: string; name: strin
     });
     // A source alias may match a candidate whose original posting was kept
     // or dismissed in Find jobs. Check that reference too, not just the alias.
-    const candidateStates = await postingStates(candidates, tx);
+    const candidateStates = await postingStates(candidates, tx, { withScores: false });
     const linked = candidates.filter((candidate) => {
       const state = candidateStates.get(postingKey(candidate));
       return !state?.saved && !state?.dismissed && !state?.applicationId;

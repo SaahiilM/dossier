@@ -191,7 +191,7 @@ describe("importExport (E10-6)", () => {
     await prisma().agentCandidate.deleteMany();
     // A score is made again from the profile, so it's neither exported nor kept by an import (#208).
     await prisma().postingScore.create({ data: { source: "JSEARCH", externalId: "job-1", score: 80, reasons: [], redFlags: [], scoredWith: "score-posting@1" } });
-    expect(JSON.stringify(file)).not.toContain("scoredWith");
+    expect(file).not.toHaveProperty("postingScores");
     await importExport(prisma(), file);
     expect(await prisma().postingScore.count()).toBe(0);
     expect(await prisma().agentCandidate.findMany({ orderBy: { externalId: "asc" }, select: { externalId: true, status: true, applicationId: true, reasons: true } })).toEqual([

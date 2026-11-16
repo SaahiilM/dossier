@@ -35,6 +35,9 @@ const card = (id: string, score: number, extra: Partial<AgentCandidateView> = {}
   error: null,
   applicationId: null,
   draftJobId: null,
+  scoreStale: false,
+  scoreReview: null,
+  autoDraftBlocked: false,
   ...extra,
 });
 const view: AgentView = {

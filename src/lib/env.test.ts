@@ -128,6 +128,17 @@ describe("parseEnv", () => {
     expect(messages).toMatch(/DATABASE_URL must be a PostgreSQL connection string/);
   });
 
+  it("reads the decision scorer and the explicit OpenRouter key source", () => {
+    expect(parseEnv({ ...valid, DOSSIER_SCORER: "openrouter-decisions" }).DOSSIER_SCORER).toBe("openrouter-decisions");
+    expect(parseEnv({ ...valid, DOSSIER_OPENROUTER_SCORING_KEY_SOURCE: " OpenRouter_API_Key " }).DOSSIER_OPENROUTER_SCORING_KEY_SOURCE).toBe("openrouter_api_key");
+    expect(problems({ ...valid, DOSSIER_OPENROUTER_SCORING_KEY_SOURCE: "yes" })).toEqual([
+      'DOSSIER_OPENROUTER_SCORING_KEY_SOURCE must be scoring or openrouter_api_key (got "yes").',
+    ]);
+    expect(problems({ ...valid, DOSSIER_SCORER: "cascade" })).toEqual([
+      'DOSSIER_SCORER must be one of ai, jev, openrouter, openrouter-decisions (got "cascade").',
+    ]);
+  });
+
   it("rejects invalid optional values", () => {
     expect(
       problems({
@@ -138,7 +149,7 @@ describe("parseEnv", () => {
       }),
     ).toEqual([
       'DOSSIER_BACKUP_RETENTION_DAYS must be a whole number of days (got "two weeks").',
-      'DOSSIER_AI_PROVIDER must be one of local, openai, anthropic, mistral, lmstudio (got "gemini").',
+      'DOSSIER_AI_PROVIDER must be one of local, openai, anthropic, mistral, lmstudio, openrouter, chatgpt_subscription, claude_cli (got "gemini").',
       "DOSSIER_AI_URL must be an http:// or https:// URL.",
     ]);
     expect(problems({ ...valid, DOSSIER_BACKUP_RETENTION_DAYS: "0" })).toEqual([

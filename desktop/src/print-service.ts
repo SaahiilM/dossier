@@ -77,7 +77,10 @@ export async function startPrintService(): Promise<PrintService> {
       }
     });
   });
-  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const port = Number(process.env.DOSSIER_DESKTOP_PRINT_PORT ?? 0) || 0;
+  await new Promise<void>((resolve, reject) =>
+    server.listen(port, "127.0.0.1", () => resolve()).on("error", reject),
+  );
   return {
     url: `http://127.0.0.1:${(server.address() as AddressInfo).port}`,
     useOrigin: (nextOrigin, nextToken) => {

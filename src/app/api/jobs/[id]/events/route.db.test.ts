@@ -16,7 +16,10 @@ vi.mock("@/lib/prisma", async () => {
   return { prisma: db.client };
 });
 vi.mock("@/lib/auth/session", () => ({ getSession: vi.fn() }));
-vi.mock("@/lib/ai/config", () => ({ loadAiConfig: async () => ({ provider: "LOCAL" }) }));
+vi.mock("@/lib/ai/config", async () => {
+  const { PROVIDER_DEFAULTS_STUB } = await import("@/test/ai-config-mock");
+  return { loadAiConfig: async () => ({ provider: "LOCAL" }), PROVIDER_DEFAULTS: PROVIDER_DEFAULTS_STUB };
+});
 
 /** Holds the job after its step until the test opens it; made before each job starts, so opening can't come too early. */
 let gate = { opened: Promise.resolve(), open: () => {} };

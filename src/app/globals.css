@@ -248,3 +248,25 @@
 @utility h-panel {
   height: calc(100dvh - 9px);
 }
+
+/* The signed-in phone shell keeps its controls above the iPhone home indicator. */
+@media (max-width: 767px) {
+  .app-shell {
+    min-height: 100dvh;
+    flex-direction: column;
+    padding-top: env(safe-area-inset-top);
+  }
+
+  .app-main {
+    padding-bottom: calc(64px + env(safe-area-inset-bottom));
+  }
+
+  .mobile-tab-bar {
+    padding-bottom: max(8px, env(safe-area-inset-bottom));
+  }
+
+  .h-panel {
+    height: calc(100dvh - 82px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+    min-height: 430px;
+  }
+}

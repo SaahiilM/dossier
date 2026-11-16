@@ -42,7 +42,7 @@ export const SECTION_NAMES: Record<BuiltInSection, string> = {
  * header, and the Facts are never printed. They keep a place in the order for
  * the list's sake, and resumes don't draw them.
  */
-export const PROFILE_ONLY_SECTIONS = ["basics", "facts"] as const;
+export const PROFILE_ONLY_SECTIONS = ["basics", "workAuthorization", "facts"] as const;
 
 /** A custom section's key (#298). */
 export const customKey = (sectionId: string) => `custom:${sectionId}`;
@@ -125,6 +125,11 @@ export function withMoved(order: readonly string[], moved: readonly string[]): s
 export function profileRows(order: readonly string[], customKeys: readonly string[] = []): string[] {
   const arranged = arrangedSections(order, customKeys);
   if (!arranged.includes("basics")) arranged.unshift("basics");
+  if (!arranged.includes("workAuthorization")) {
+    const factsAt = arranged.indexOf("facts");
+    if (factsAt >= 0) arranged.splice(factsAt, 0, "workAuthorization");
+    else arranged.push("workAuthorization");
+  }
   if (!arranged.includes("facts")) arranged.push("facts");
   return arranged;
 }

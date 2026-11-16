@@ -4,6 +4,7 @@ import type { Prisma, PrismaClient } from "@/generated/prisma/client";
 import { photoFromFields } from "@/lib/photo";
 import { prisma } from "@/lib/prisma";
 import { basicsFromFields, factTexts, inEntryOrder, type FactItem, type ProfileData } from "@/lib/profile";
+import { workAuthorizationFromFields } from "@/lib/work-authorization";
 import { loadSettings } from "@/lib/settings-data";
 
 /** The profile's name, "" without one: for the sidebar, the sign-in greeting and file names. */
@@ -117,6 +118,7 @@ export async function loadProfile(db: PrismaClient | Prisma.TransactionClient = 
       })),
     })),
     facts,
+    workAuthorization: workAuthorizationFromFields(fields),
   };
 }
 

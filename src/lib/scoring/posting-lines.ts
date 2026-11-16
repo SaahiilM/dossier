@@ -65,7 +65,9 @@ export function postingLines(text: string): string[] {
     for (const piece of pieces) {
       const line = shorten(clean(piece));
       const key = line.toLowerCase();
-      if (line.length < MIN_LENGTH || line.endsWith(":") || line.split(" ").length < 2 || seen.has(key)) continue;
+      const words = line.split(" ").length;
+      const tooShort = item.bullet ? line.length < 2 : line.length < MIN_LENGTH;
+      if (tooShort || line.endsWith(":") || (words < 2 && !item.bullet) || seen.has(key)) continue;
       seen.add(key);
       lines.push({ text: line, bullet: item.bullet });
     }

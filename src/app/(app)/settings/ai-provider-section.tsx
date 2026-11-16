@@ -14,7 +14,8 @@ import { AI_TIMEOUT_LIMITS, API_KEY_UNREADABLE, defaultTimeoutSeconds, PROVIDER_
 import { cn } from "@/lib/cn";
 import { useAutosave } from "@/hooks/use-autosave";
 
-import { listAiModels, saveAiProvider, saveAiTimeout, saveApiKey, testAiConnection } from "./actions";
+import { listAiModels, saveAiProvider, saveAiTimeout, saveApiKey, saveChatGptAccountSub, testAiConnection } from "./actions";
+import { SubscriptionProviderSection } from "./subscription-provider-section";
 import { SettingsSectionIntro } from "./settings-screen";
 
 type Connection =
@@ -40,7 +41,15 @@ const SENT_TO_HOSTED =
  * picking a card or a model right away, typing once you pause. The key is
  * saved when you leave its field and never shown again.
  */
-export function AiProviderSection({ initial }: { initial: AiSettingsView }) {
+const SUBSCRIPTION_PROVIDERS = new Set<AiProvider>(["CHATGPT_SUBSCRIPTION", "CLAUDE_CLI"]);
+
+export function AiProviderSection({
+  initial,
+  inDesktopApp = false,
+}: {
+  initial: AiSettingsView;
+  inDesktopApp?: boolean;
+}) {
   const track = useTrackSave();
   const [provider, setProvider] = useState(initial.provider);
   const [baseUrl, setBaseUrl] = useState(initial.baseUrl);
@@ -55,6 +64,8 @@ export function AiProviderSection({ initial }: { initial: AiSettingsView }) {
   const [timeoutProblem, setTimeoutProblem] = useState(false);
   const savedTimeout = useRef(initial.timeoutSeconds);
   const option = providerOption(provider);
+  const subscription = SUBSCRIPTION_PROVIDERS.has(provider);
+  const subscriptionTab = provider === "CLAUDE_CLI" ? "claude" : "chatgpt";
   // What an empty Timeout means: the environment's, or the card's own.
   const fallbackTimeout = initial.envTimeoutSeconds ?? defaultTimeoutSeconds(provider);
 
@@ -194,6 +205,40 @@ export function AiProviderSection({ initial }: { initial: AiSettingsView }) {
         </p>
       )}
 
+      {subscription ? (
+        <>
+          <SubscriptionProviderSection
+            tab={subscriptionTab}
+            chatGptModel={provider === "CHATGPT_SUBSCRIPTION" ? model : ""}
+            claudeModel={provider === "CLAUDE_CLI" ? model : ""}
+            chatGptAccountSub={initial.chatGptAccountSub}
+            inDesktopApp={inDesktopApp}
+            onChatGptModelChange={(value) => {
+              setModel(value);
+              changed();
+              setSaveNow((count) => count + 1);
+            }}
+            onClaudeModelChange={(value) => {
+              setModel(value);
+              changed();
+              setSaveNow((count) => count + 1);
+            }}
+            onChatGptAccountSubChange={(sub) => {
+              void track(saveChatGptAccountSub({ sub }));
+            }}
+            onConnectionChange={(view) => {
+              const sub = view.chatGpt.accounts[0]?.sub;
+              if (sub && !initial.chatGptAccountSub) void track(saveChatGptAccountSub({ sub }));
+            }}
+          />
+          <Card className="flex flex-wrap items-center gap-3.5 p-[18px]">
+            <Button variant="secondary" onClick={() => void test()} disabled={connection.status === "testing"}>
+              {connection.status === "testing" ? "Testing…" : "Test connection"}
+            </Button>
+            <ConnectionStatus connection={connection} />
+          </Card>
+        </>
+      ) : (
       <Card className="grid grid-cols-1 gap-x-[18px] gap-y-5 sm:grid-cols-2">
         <Input
           className="sm:col-span-2"
@@ -330,6 +375,7 @@ export function AiProviderSection({ initial }: { initial: AiSettingsView }) {
           <ConnectionStatus connection={connection} />
         </div>
       </Card>
+      )}
     </>
   );
 }

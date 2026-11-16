@@ -27,7 +27,8 @@ datasource db {
 
 /// The profile's basics (name, headline, contact details, summary…), one row
 /// per filled-in field. The keys and how each value is written are in
-/// src/lib/profile.ts (PROFILE_KEYS); a missing key means empty.
+/// src/lib/profile.ts (PROFILE_KEYS) and src/lib/work-authorization.ts
+/// (WORK_AUTH_FIELD_KEYS); a missing key means empty or unknown.
 model ProfileField {
   key       String   @id
   value     String
@@ -381,6 +382,12 @@ enum AiProvider {
   MISTRAL
   /// LM Studio on the user's own hardware (#210).
   LMSTUDIO
+  /// OpenRouter's hosted OpenAI-compatible API.
+  OPENROUTER
+  /// ChatGPT Plus or Pro through SIWC on the local runtime.
+  CHATGPT_SUBSCRIPTION
+  /// Claude Code CLI OAuth on the machine that runs Dossier.
+  CLAUDE_CLI
 }
 
 enum Creativity {
@@ -777,6 +784,12 @@ model AgentCandidate {
   reasons       Json?
   /// What gives pause, as a JSON list of strings.
   redFlags      Json?
+  /// Structured eligibility (review, blockAutoDraft, issues); see PostingFitMeta.
+  meta          Json?
+  /// Hash of profile, scorer policy, posting text, and reference date when scored.
+  inputFingerprint String?
+  /// What scored it, e.g. score-posting-jev@2 (jev-1.14.0).
+  scoredWith    String               @default("")
   status        AgentCandidateStatus @default(SCORED)
   /// Why preparing a draft failed, if it did.
   error         String?
@@ -807,6 +820,10 @@ model PostingScore {
   redFlags   Json
   /// What scored it: the prompt version, e.g. "score-posting@1", or Jev's, e.g. "score-posting-jev@1 (jev-1.14.0)".
   scoredWith String
+  /// Structured eligibility (review, blockAutoDraft, issues); see PostingFitMeta.
+  meta          Json?
+  /// Hash of profile, scorer policy, posting text, and reference date when scored.
+  inputFingerprint String?
   createdAt  DateTime      @default(now())
   updatedAt  DateTime      @updatedAt
 

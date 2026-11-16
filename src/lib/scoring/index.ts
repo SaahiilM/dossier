@@ -5,17 +5,21 @@ import { isAiConfigured } from "@/lib/ai/config";
 import { AiError } from "@/lib/ai/errors";
 import { loadTaskOptions } from "@/lib/ai/task-options";
 import { scorePosting } from "@/lib/ai/tasks";
-import type { PostingFit } from "@/lib/fit";
+import { chatScoreMeta, type PostingFit } from "@/lib/fit";
 import { postingText, type FoundPosting } from "@/lib/job-search/search";
 import type { ProfileData } from "@/lib/profile";
 import { recordUsage } from "@/lib/usage-data";
 
-import { jevKey, loadScoringConfig, type ScoringConfig } from "./config";
+import { jevKey, loadScoringConfig, openRouterDecisionTarget, openRouterKey, type ScoringConfig } from "./config";
+export { postingContentHash, scoreInputFingerprint, scorerPolicyVersion } from "./fingerprint";
 import { scoreWithJev } from "./jev";
+import { scoreWithOpenRouter } from "./openrouter";
+import { scoreWithOpenRouterDecisions } from "./openrouter-decisions";
 
 // Scoring a posting against the profile (#208, #274), with whatever Settings →
-// Scoring chose: the AI model's score-posting, or Jev. Find jobs' Score and
-// the job agent both come here.
+// Scoring chose: the AI model's score-posting, Jev, an OpenRouter decision
+// model, or an OpenRouter chat model. Find jobs' Score and the job agent
+// both come here.
 
 export type ScorablePosting = Pick<FoundPosting, "title" | "company" | "place" | "remote" | "salary" | "description">;
 
@@ -28,6 +32,8 @@ export const AI_PROVIDER_MISSING = "Choose an AI provider in Settings → AI pro
 export async function scoringProblem(config?: ScoringConfig): Promise<string | null> {
   const settled = config ?? (await loadScoringConfig());
   if (settled.scorer === "JEV") return jevKey(settled).problem;
+  if (settled.scorer === "OPENROUTER_DECISIONS") return openRouterDecisionTarget(settled).problem;
+  if (settled.scorer === "OPENROUTER") return openRouterKey(settled).problem;
   return (await isAiConfigured()) ? null : AI_PROVIDER_MISSING;
 }
 
@@ -43,11 +49,29 @@ export async function loadPostingScorer(): Promise<PostingScorer> {
     const { key } = jev;
     return (posting, profile, signal) => scoreWithJev(posting, profile, { key, signal, onUsage: recordUsage });
   }
+  if (config.scorer === "OPENROUTER_DECISIONS") {
+    const decision = openRouterDecisionTarget(config);
+    if (decision.problem !== null) throw AiError.config(decision.problem);
+    const { key, model } = decision;
+    return (posting, profile, signal) => scoreWithOpenRouterDecisions(posting, profile, { key, model, signal, onUsage: recordUsage });
+  }
+  if (config.scorer === "OPENROUTER") {
+    const judge = openRouterKey(config);
+    if (judge.problem !== null) throw AiError.config(judge.problem);
+    const { key, model } = judge;
+    const timeoutMs = 120_000;
+    return async (posting, profile, signal) => {
+      const { data, scoredWith } = await scoreWithOpenRouter(posting, profile, { key, model, timeoutMs, signal, onUsage: recordUsage });
+      const fit: PostingFit = { ...data, meta: chatScoreMeta(data) };
+      return { data: fit, scoredWith };
+    };
+  }
   if (!(await isAiConfigured())) throw AiError.config(AI_PROVIDER_MISSING);
   const [provider, options] = await Promise.all([getAiProvider(), loadTaskOptions()]);
   return async (posting, profile, signal) => {
     const { title, company, place, remote, salary } = posting;
     const { data, promptVersion } = await scorePosting(provider, { posting: postingText(posting), title, company, place, remote, salary, profile }, { ...options, signal });
-    return { data, scoredWith: promptVersion };
+    const fit: PostingFit = { ...data, meta: chatScoreMeta(data) };
+    return { data: fit, scoredWith: promptVersion };
   };
 }

@@ -63,7 +63,7 @@ function paintBar(colors: BarColors) {
   if (!window) return;
   window.webContents.send("bar:colors", colors);
   window.setBackgroundColor(colors.background);
-  window.setTitleBarOverlay({ color: colors.background, symbolColor: colors.ink });
+  if (process.platform !== "darwin") window.setTitleBarOverlay({ color: colors.background, symbolColor: colors.ink });
 }
 
 /** Paints the bar like the page below it. What the page answers is only ever used as colours. */
@@ -393,7 +393,7 @@ function createWindow() {
   void next.loadFile(BAR_PAGE);
 }
 
-function start() {
+async function start() {
   preferences = readPreferences(preferencesFile());
   app.setAboutPanelOptions({ applicationName: "Dossier", applicationVersion: app.getVersion(), copyright: "Free software under the AGPL-3.0", website: REPOSITORY_URL, iconPath: ICON });
   prepareSessions();
@@ -401,6 +401,16 @@ function start() {
   buildMenu();
   createWindow();
   nativeTheme.on("updated", () => void matchBarToPage());
+
+  const devUrl = !app.isPackaged ? process.env.DOSSIER_DESKTOP_DEV_URL?.replace(/\/+$/, "") : undefined;
+  const devToken = !app.isPackaged ? (process.env.DOSSIER_DESKTOP_DEV_TOKEN ?? process.env.DOSSIER_DESKTOP_TOKEN) : undefined;
+  if (devUrl && devToken) {
+    printService = await startPrintService();
+    printService.useOrigin(devUrl, devToken);
+    showServer(devUrl, devToken);
+    return;
+  }
+
   if (preferences.mode === "server" && preferences.serverOrigin) showServer(preferences.serverOrigin);
   else if (preferences.mode === "local" && localBundle(RESOURCES)) void openLocal();
   else showStart({ screen: "choose" });
@@ -422,7 +432,7 @@ if (app.requestSingleInstanceLock()) {
     stopLocal();
     printService?.close();
   });
-  void app.whenReady().then(start);
+  void app.whenReady().then(() => void start());
 } else {
   app.quit();
 }

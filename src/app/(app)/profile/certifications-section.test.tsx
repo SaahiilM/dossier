@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { CertificationItem, ProfileData } from "@/lib/profile";
+import { emptyWorkAuthorization } from "@/lib/work-authorization";
 
 import { reorderCertifications, saveCertification } from "./actions";
 import { CertificationsSection } from "./certifications-section";
@@ -45,6 +46,7 @@ function Harness() {
     references: [],
     customSections: [],
     facts: [],
+    workAuthorization: emptyWorkAuthorization(),
     photo: null,
   });
   useEffect(() => {

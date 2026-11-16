@@ -5,7 +5,10 @@ const settings = vi.hoisted(() => ({ resumeSections: { order: [] as string[], of
 vi.mock("@/lib/settings-data", () => ({ loadSettings: async () => settings }));
 const db = vi.hoisted(() => ({ postingSearch: { findUnique: vi.fn() }, postingScore: { upsert: vi.fn() } }));
 vi.mock("@/lib/prisma", () => ({ prisma: db }));
-vi.mock("@/lib/ai/config", () => ({ isAiUsable: async () => false }));
+vi.mock("@/lib/ai/config", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/ai/config")>()),
+  isAiUsable: async () => false,
+}));
 vi.mock("@/lib/profile-data", async () => {
   const { demoProfile } = await import("@/lib/demo-profile");
   return { loadProfile: async () => demoProfile() };
@@ -90,17 +93,23 @@ describe("the Claude connector at /api/mcp (#221)", () => {
 
     const { result } = await answer(await call({ jsonrpc: "2.0", id: 2, method: "tools/list" }, token));
     expect(result?.tools?.map((entry) => entry.name).sort()).toEqual([
+      "approve_agent_candidate",
       "check_draft",
       "draft_application",
+      "get_agent_candidate",
+      "get_agent_status",
       "get_application",
+      "get_dashboard",
       "get_posting",
       "get_profile",
+      "list_agent_candidates",
       "list_applications",
       "more_jobs",
       "save_application",
       "save_job_scores",
       "search_jobs",
       "set_application_status",
+      "update_application_unit",
     ]);
   });
 

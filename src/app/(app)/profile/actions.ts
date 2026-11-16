@@ -9,6 +9,7 @@ import { action, ActionError } from "@/lib/action";
 import { rewriteSectionOnDrafts } from "@/lib/custom-section-drafts";
 import { prisma } from "@/lib/prisma";
 import { fieldsFromBasics, inEntryOrder } from "@/lib/profile";
+import { fieldsFromWorkAuthorization, workAuthorizationSchema } from "@/lib/work-authorization";
 import { findOrCreateSkill, firstSort, nextSort } from "@/lib/profile-entries";
 import { discardProfileImports, importProfileJob } from "@/lib/jobs/import-profile";
 import { isPhotoDataUrl, PHOTO_KEY, PHOTO_MAX_LENGTH, PHOTO_ON_RESUMES_KEY } from "@/lib/photo";
@@ -23,6 +24,18 @@ import { loadSettings, saveSettings } from "@/lib/settings-data";
 const text = (max: number) => z.string().max(max);
 
 /** Saves the Basics section (PRO-1, PRO-2); autosaved as you type. */
+/** Work authorization and relocation; profile-only, stored in ProfileField rows. */
+export const saveWorkAuthorization = action(workAuthorizationSchema, async (workAuthorization) => {
+  await prisma.$transaction(
+    Object.entries(fieldsFromWorkAuthorization(workAuthorization)).map(([key, value]) =>
+      value === null
+        ? prisma.profileField.deleteMany({ where: { key } })
+        : prisma.profileField.upsert({ where: { key }, create: { key, value }, update: { value } }),
+    ),
+  );
+  return null;
+});
+
 export const saveBasics = action(
   z.object({
     name: text(200),

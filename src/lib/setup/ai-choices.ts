@@ -9,7 +9,7 @@ import { WIKI, type Instruction } from "./instructions";
 // OpenRouter's free models can go to providers that do. Resumes don't belong
 // there (decided 5 November 2026). The only free choice is your own computer.
 
-export type AiPriority = "private" | "writing" | "cost" | "other";
+export type AiPriority = "private" | "subscription" | "writing" | "cost" | "other";
 
 export const AI_PRIORITIES: readonly { value: AiPriority; name: string; description: string }[] = [
   {
@@ -17,12 +17,27 @@ export const AI_PRIORITIES: readonly { value: AiPriority; name: string; descript
     name: "Free and private",
     description: "AI that runs on your own computer: nothing leaves it, and it costs nothing. It needs a recent computer, and writing takes minutes rather than seconds.",
   },
-  { value: "writing", name: "Best writing", description: "The best-known AI companies. You buy a little credit, and pay for what you use." },
+  {
+    value: "subscription",
+    name: "My subscription",
+    description:
+      "ChatGPT Plus or Pro, or Claude through Claude Code on this machine. You sign in with the plan you already pay for, not a separate developer API key.",
+  },
+  { value: "writing", name: "Developer API", description: "OpenAI or Anthropic through your own API key. You buy a little credit, and pay for what you use." },
   { value: "cost", name: "Lowest cost", description: "Smaller models from Google and Mistral that cost less. You buy a little credit, and pay for what you use." },
   { value: "other", name: "Something else", description: "OpenRouter, which reaches many companies' models with one key, or an AI server you already have." },
 ];
 
-export type AiChoiceId = "lmstudio" | "ollama" | "openai" | "anthropic" | "gemini" | "mistral" | "openrouter";
+export type AiChoiceId =
+  | "lmstudio"
+  | "ollama"
+  | "chatgpt_subscription"
+  | "claude_cli"
+  | "openai"
+  | "anthropic"
+  | "gemini"
+  | "mistral"
+  | "openrouter";
 
 export type AiChoice = {
   id: AiChoiceId;
@@ -42,6 +57,8 @@ export type AiChoice = {
   steps: readonly Instruction[];
   /** The key to paste, if any. */
   key: { label: string; startsWith?: string } | null;
+  /** Sign-in on this machine instead of an API key (ChatGPT plan, Claude Code). */
+  subscription?: boolean;
   help: string;
 };
 
@@ -89,10 +106,51 @@ export const AI_CHOICES: readonly AiChoice[] = [
     help: `${WIKI}/Choosing-an-AI-provider#local-model-with-ollama`,
   },
   {
+    id: "chatgpt_subscription",
+    priority: "subscription",
+    name: "ChatGPT plan",
+    about: "ChatGPT Plus or Pro through sign-in on this computer — not the developer platform.",
+    provider: AiProvider.CHATGPT_SUBSCRIPTION,
+    baseUrl: "",
+    models: [],
+    subscription: true,
+    cost: "Your ChatGPT Plus or Pro subscription.",
+    data: "Your profile without your contact details, and the postings you add, go to OpenAI through your plan. It doesn't train its models on them unless you choose to share them.",
+    steps: [
+      { text: "Press **Connect ChatGPT** below and finish sign-in in your browser." },
+      { text: "Allow Dossier to use your plan when OpenAI asks." },
+      { text: "Choose a model, then press **Check it**." },
+    ],
+    key: null,
+    help: `${WIKI}/Choosing-an-AI-provider#openai`,
+  },
+  {
+    id: "claude_cli",
+    priority: "subscription",
+    name: "Claude Code",
+    about: "Claude through the CLI you sign into on the machine that runs Dossier — not the Anthropic developer API.",
+    provider: AiProvider.CLAUDE_CLI,
+    baseUrl: "",
+    models: [],
+    subscription: true,
+    cost: "Your Claude Pro, Max, or Team subscription through Claude Code.",
+    data: "Your profile without your contact details, and the postings you add, go to Anthropic through your CLI session. It doesn't train its models on them by default.",
+    steps: [
+      {
+        text: "Install Claude Code if you have not already.",
+        link: { href: "https://docs.anthropic.com/en/docs/claude-code", label: "Claude Code documentation" },
+      },
+      { text: "On this machine, open a terminal and run **claude login**. Finish sign-in there." },
+      { text: "Type the model name your CLI accepts below, press **Check CLI status**, then **Check it**." },
+    ],
+    key: null,
+    help: `${WIKI}/Choosing-an-AI-provider#anthropic`,
+  },
+  {
     id: "openai",
     priority: "writing",
-    name: "OpenAI",
-    about: "The company behind ChatGPT.",
+    name: "OpenAI API",
+    about: "OpenAI's developer platform and API — separate from a ChatGPT Plus subscription.",
     provider: AiProvider.OPENAI,
     baseUrl: "https://api.openai.com/v1",
     models: ["gpt-6.1-terra", "gpt-6-luna"],
@@ -113,8 +171,8 @@ export const AI_CHOICES: readonly AiChoice[] = [
   {
     id: "anthropic",
     priority: "writing",
-    name: "Claude",
-    about: "Anthropic's AI.",
+    name: "Claude API",
+    about: "Anthropic's developer platform and API — separate from Claude Code on your machine.",
     provider: AiProvider.ANTHROPIC,
     baseUrl: "https://api.anthropic.com",
     models: ["claude-sonnet-5-5", "claude-haiku-5-5"],
@@ -180,7 +238,7 @@ export const AI_CHOICES: readonly AiChoice[] = [
     priority: "other",
     name: "OpenRouter",
     about: "One key for many companies' models. Dossier starts on an OpenAI model.",
-    provider: AiProvider.OPENAI,
+    provider: AiProvider.OPENROUTER,
     baseUrl: "https://openrouter.ai/api/v1",
     models: ["openai/gpt-6.1-terra", "google/gemini-3.8-flash"],
     cost: "You buy credit first, at least $5, plus OpenRouter's fee of about 5.5%.",
@@ -217,6 +275,9 @@ export function pickModel(wanted: readonly string[], served: readonly string[]):
 export function choiceOf(provider: AiProvider, baseUrl: string): AiChoiceId | null {
   if (provider === AiProvider.LMSTUDIO) return "lmstudio";
   if (provider === AiProvider.LOCAL) return "ollama";
+  if (provider === AiProvider.CHATGPT_SUBSCRIPTION) return "chatgpt_subscription";
+  if (provider === AiProvider.CLAUDE_CLI) return "claude_cli";
   const host = URL.canParse(baseUrl) ? new URL(baseUrl).hostname : "";
+  if (provider === AiProvider.OPENROUTER || (provider === AiProvider.OPENAI && host.endsWith("openrouter.ai"))) return "openrouter";
   return AI_CHOICES.find((choice) => choice.provider === provider && choice.baseUrl && new URL(choice.baseUrl).hostname === host)?.id ?? null;
 }

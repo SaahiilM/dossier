@@ -19,6 +19,7 @@ import { askForUsagePing, notePageLoad, USAGE_PING_HOST } from "@/lib/usage-ping
 import { appVersion } from "@/lib/version";
 
 import { AnnouncementNotice } from "./announcement-notice";
+import { MobileTabBar } from "./mobile-tab-bar";
 import { Sidebar } from "./sidebar";
 import { UsagePingDialog } from "./usage-ping-dialog";
 
@@ -48,7 +49,7 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
   const [waiting, agent] = await Promise.all([inboxCount().catch(() => 0), countAgentQueue().catch(() => 0)]);
 
   return (
-    <div className="flex min-h-screen">
+    <div className="app-shell flex min-h-screen">
       <a
         href="#main"
         className="fixed top-3 left-3 z-50 -translate-y-[200%] rounded-control bg-primary px-4 py-2.5 text-sm font-medium text-on-primary hover:text-on-primary focus:translate-y-0"
@@ -67,15 +68,16 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
       {/* The screen sits in a white panel inset from the shell. Each screen
           starts with its page bar (PageHeader or PageBar), which draws the
           panel's top edge and stays in view. */}
-      <div className="flex min-w-0 flex-1 flex-col bg-paper px-2 pb-2">
+      <div className="flex min-w-0 flex-1 flex-col bg-paper px-2 pb-2 max-md:px-0 max-md:pb-0">
         <main
           id="main"
           tabIndex={-1}
-          className="relative flex min-w-0 flex-1 flex-col rounded-b-panel border border-t-0 border-line-card bg-surface focus:outline-none"
+          className="app-main relative flex min-w-0 flex-1 flex-col rounded-b-panel border border-t-0 border-line-card bg-surface focus:outline-none max-md:rounded-none max-md:border-x-0"
         >
           {children}
         </main>
       </div>
+      <MobileTabBar agentCount={agent} />
       {/* A new notice starts over, once the one before was dismissed. */}
       {announcement && <AnnouncementNotice key={announcement.id} announcement={announcement} />}
       {/* Asked once, until answered (#172); nothing is sent before a yes. It waits while the setup guide is open. */}

@@ -22,6 +22,9 @@ vi.mock("@/lib/prisma", async () => {
   db.client = createTestClient();
   return { prisma: db.client };
 });
+vi.mock("@/lib/env", () => ({
+  env: { DOSSIER_SECRET: "a".repeat(32), DOSSIER_PASSWORD: "a".repeat(60), DATABASE_URL: "file:./test.db" },
+}));
 vi.mock("@/lib/profile-data", async () => {
   const { demoProfile } = await import("@/lib/demo-profile");
   return { loadProfile: async () => demoProfile() };

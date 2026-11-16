@@ -28,6 +28,7 @@ const choiceIds = AI_CHOICES.map((choice) => choice.id) as [AiChoiceId, ...AiCho
  */
 export const connectAi = action(z.object({ choice: z.enum(choiceIds), key: z.string().trim().max(1000).optional() }), async ({ choice: id, key }) => {
   const choice = aiChoice(id);
+  if (choice.subscription) throw new ActionError(`${choice.name} uses sign-in below, not an API key.`);
   if (!choice.key) throw new ActionError(`${choice.name} runs on your computer, so there's no key to check.`);
   const saved = await loadSettings();
   const same = saved.provider === choice.provider && saved.baseUrl === choice.baseUrl;
@@ -68,7 +69,15 @@ export const findLocalAi = action(z.object({ choice: z.enum(["lmstudio", "ollama
   for (const baseUrl of LOCAL_ADDRESSES[id]) {
     let models: string[];
     try {
-      models = await createProvider({ provider: choice.provider, baseUrl, model: null, apiKey: null, apiKeyProblem: null, timeoutMs: 5_000 }).listModels(
+      models = await createProvider({
+        provider: choice.provider,
+        baseUrl,
+        model: null,
+        apiKey: null,
+        apiKeyProblem: null,
+        timeoutMs: 5_000,
+        chatGptAccountSub: null,
+      }).listModels(
         AbortSignal.timeout(5_000),
       );
     } catch (error) {

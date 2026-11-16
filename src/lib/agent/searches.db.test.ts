@@ -13,7 +13,9 @@ import { attributeAgentCandidates } from "./attribution";
 import { candidateData } from "./candidates";
 import { deleteAgentSearch, listAgentSearches, lockAgentSearches, saveAgentSearch, setAgentSearchEnabled } from "./searches";
 
-vi.mock("@/lib/env", () => ({ env: { DOSSIER_SECRET: "s".repeat(32) } }));
+vi.mock("@/lib/env", () => ({
+  env: { DOSSIER_SECRET: "s".repeat(32), DOSSIER_PASSWORD: "p".repeat(60), DATABASE_URL: "file:./test.db" },
+}));
 vi.mock("@/lib/prisma", () => ({ prisma: new Proxy({}, { get: (_, key) => Reflect.get(client, key) }) }));
 const client = createTestClient();
 const input = { name: "  Design  ", query: { ...EMPTY_QUERY, keywords: "  Designer  ", country: " DE ", place: " Berlin " } };
@@ -103,7 +105,7 @@ describe("recurring Agent search storage", () => {
     await deleteAgentSearch(first.id, client);
     await client.setting.createMany({ data: [{ key: "agentRuns", value: "[]" }, { key: "agentQuery", value: JSON.stringify(input.query) }] });
     const data = await buildExport(client);
-    expect(data.schemaVersion).toBe(11);
+    expect(data.schemaVersion).toBe(12);
     expect(data.settings.map((setting) => setting.key)).not.toContain("agentQuery");
     expect(data.settings.map((setting) => setting.key)).not.toContain("agentRuns");
     const parsed = parseExport(JSON.stringify(data));
@@ -122,7 +124,7 @@ describe("recurring Agent search storage", () => {
   it("reads posting exclusions through the caller's transaction, including uncommitted changes", async () => {
     await client.$transaction(async (tx) => {
       await tx.posting.create({ data: { source: "JSEARCH", externalId: "uncommitted", savedAt: new Date() } });
-      const states = await postingStates([posting("uncommitted")], tx);
+      const states = await postingStates([posting("uncommitted")], tx, { withScores: false });
       expect([...states.values()]).toEqual([expect.objectContaining({ saved: true })]);
     });
   });

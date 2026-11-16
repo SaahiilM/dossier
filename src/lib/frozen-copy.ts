@@ -23,6 +23,7 @@ import {
 import { extractedSchema } from "@/lib/application-data";
 import { prisma } from "@/lib/prisma";
 import { BASICS_FIELDS, type Basics, type ProfileData } from "@/lib/profile";
+import { emptyWorkAuthorization, workAuthorizationSchema } from "@/lib/work-authorization";
 import { loadProfile } from "@/lib/profile-data";
 import { sectionOfUnit } from "@/lib/resume-sections";
 import { THEME_STYLE_DEFAULTS, BUILT_IN_THEMES, type ThemeData } from "@/lib/themes";
@@ -82,6 +83,8 @@ const frozenProfileSchema = z.object({
     }),
   ),
   facts: list(z.object({ id: z.string(), text })),
+  /** Absent in copies frozen before work-authorization fields; defaults keep imports reading. */
+  workAuthorization: workAuthorizationSchema.default(emptyWorkAuthorization),
 }) satisfies z.ZodType<Omit<ProfileData, "photo">, unknown>;
 
 /** A theme as a copy holds it. One that no longer reads gives way to the document's own. */

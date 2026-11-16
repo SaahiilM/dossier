@@ -84,6 +84,42 @@ export const PROVIDER_OPTIONS: readonly {
     defaultModel: "mistral-small-2603",
     apiKey: { label: "API key" },
   },
+  {
+    value: AiProvider.OPENROUTER,
+    name: "OpenRouter",
+    vendor: "OpenRouter",
+    description: "Many companies' models through one OpenRouter key.",
+    tag: "Hosted · pay per use",
+    local: false,
+    defaultUrl: "https://openrouter.ai/api/v1",
+    urlPlaceholder: "https://openrouter.ai/api/v1",
+    defaultModel: "",
+    apiKey: { label: "OpenRouter key", hint: "Starts with sk-or-." },
+  },
+  {
+    value: AiProvider.CHATGPT_SUBSCRIPTION,
+    name: "ChatGPT plan",
+    vendor: "OpenAI",
+    description: "ChatGPT Plus or Pro through sign-in on this computer.",
+    tag: "Desktop · your subscription",
+    local: false,
+    defaultUrl: "",
+    urlPlaceholder: "",
+    defaultModel: "",
+    apiKey: null,
+  },
+  {
+    value: AiProvider.CLAUDE_CLI,
+    name: "Claude Code",
+    vendor: "Anthropic",
+    description: "Claude through the CLI you sign into on this machine.",
+    tag: "Local CLI · your subscription",
+    local: false,
+    defaultUrl: "",
+    urlPlaceholder: "",
+    defaultModel: "",
+    apiKey: null,
+  },
 ];
 
 export function providerOption(provider: AiProvider) {
@@ -116,6 +152,7 @@ export type AiSettingsView = {
   baseUrl: string;
   model: string;
   keyState: KeyState;
+  chatGptAccountSub: string;
   /** Saved in Settings; null for DOSSIER_AI_TIMEOUT_SECONDS's, or the provider's own. */
   timeoutSeconds: number | null;
   /** DOSSIER_AI_TIMEOUT_SECONDS, if it's set. */

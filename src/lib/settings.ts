@@ -112,6 +112,8 @@ export const settingsSchema = z.object({
   provider: z.enum(AiProvider).nullable().catch(null),
   baseUrl: z.string().nullable().catch(null),
   model: z.string().nullable().catch(null),
+  /** ChatGPT SIWC account (`sub`) used when the provider is CHATGPT_SUBSCRIPTION. */
+  chatGptAccountSub: z.string().nullable().catch(null),
   /** Encrypted with a key derived from DOSSIER_SECRET (E6-2); never sent to the client. */
   apiKeyEnc: z.string().nullable().catch(null),
   /** How long one AI request may take, in seconds (public issue 118); null for DOSSIER_AI_TIMEOUT_SECONDS's, or the provider's own. */
@@ -177,6 +179,9 @@ export const settingsSchema = z.object({
   // AI model. Jev's key is encrypted like the others, under its own key.
   scorer: z.enum(SCORERS).nullable().catch(null),
   typesafeKeyEnc: z.string().nullable().catch(null),
+  /** Independent OpenRouter judging credentials; isolated from general AI provider settings. */
+  openRouterScoringModel: z.string().nullable().catch(null),
+  openRouterScoringKeyEnc: z.string().nullable().catch(null),
   // Job agent (E16): recurring searches, run once a day. Off until turned on.
   // It asks the source in Settings → Job search, with its key.
   agentEnabled: flag(false),

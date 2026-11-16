@@ -5,23 +5,37 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { toast } from "@/components/toast";
 import type { AiSettingsView } from "@/lib/ai/provider-options";
 
-import { listAiModels, saveAiProvider, saveAiTimeout, saveApiKey, testAiConnection } from "./actions";
+import { listAiModels, saveAiProvider, saveAiTimeout, saveApiKey, saveChatGptAccountSub, testAiConnection } from "./actions";
 import { AiProviderSection } from "./ai-provider-section";
+
+vi.mock("./subscription-provider-section", () => ({
+  SubscriptionProviderSection: () => <div data-testid="subscription-provider" />,
+}));
 
 vi.mock("./actions", () => ({
   saveAiProvider: vi.fn(),
   saveApiKey: vi.fn(),
   saveAiTimeout: vi.fn(),
+  saveChatGptAccountSub: vi.fn(),
   listAiModels: vi.fn(),
   testAiConnection: vi.fn(),
 }));
 vi.mock("@/components/toast", () => ({ toast: vi.fn(), toastResult: (result: unknown) => result }));
 
-const local: AiSettingsView = { provider: "LOCAL", baseUrl: "http://ollama:11434", model: "qwen2.5:3b", keyState: "none", timeoutSeconds: null, envTimeoutSeconds: null };
+const local: AiSettingsView = {
+  provider: "LOCAL",
+  baseUrl: "http://ollama:11434",
+  model: "qwen2.5:3b",
+  keyState: "none",
+  chatGptAccountSub: "",
+  timeoutSeconds: null,
+  envTimeoutSeconds: null,
+};
 
 beforeEach(() => {
   vi.mocked(saveAiProvider).mockReset().mockResolvedValue({ ok: true, data: { keyState: "none" } });
   vi.mocked(saveApiKey).mockReset().mockResolvedValue({ ok: true, data: { keyState: "set" } });
+  vi.mocked(saveChatGptAccountSub).mockReset().mockResolvedValue({ ok: true, data: null });
   vi.mocked(saveAiTimeout).mockReset().mockImplementation(async ({ seconds }) => ({ ok: true, data: { seconds } }));
   vi.mocked(listAiModels).mockReset().mockResolvedValue({ ok: true, data: { models: ["llama3.1:8b", "qwen2.5:3b"], problem: null } });
   vi.mocked(testAiConnection).mockReset().mockResolvedValue({ ok: true, data: { connected: true, model: "qwen2.5:3b", seconds: 1.4 } });
@@ -37,6 +51,9 @@ describe("AiProviderSection", () => {
       "OpenAI-compatible",
       "Anthropic",
       "Mistral",
+      "OpenRouter",
+      "ChatGPT plan",
+      "Claude Code",
     ]);
     expect(screen.getByRole("radio", { name: "Local model" })).toBeChecked();
     expect(screen.getByLabelText("Server address")).toHaveValue("http://ollama:11434");
@@ -44,6 +61,14 @@ describe("AiProviderSection", () => {
     expect(screen.getByLabelText("Model")).toHaveValue("qwen2.5:3b");
     expect(screen.getByText("Not needed for a local model")).toBeInTheDocument();
     expect(screen.queryByRole("note")).not.toBeInTheDocument();
+  });
+
+  it("shows subscription controls without an API key field", async () => {
+    render(<AiProviderSection initial={local} />);
+    await userEvent.click(screen.getByRole("radio", { name: "ChatGPT plan" }));
+    expect(screen.getByTestId("subscription-provider")).toBeInTheDocument();
+    expect(screen.queryByLabelText(/API key/i)).not.toBeInTheDocument();
+    await waitFor(() => expect(saveAiProvider).toHaveBeenCalledWith({ provider: "CHATGPT_SUBSCRIPTION", baseUrl: "", model: "" }));
   });
 
   it("fills in a hosted provider's defaults, says what's sent to it and saves at once", async () => {

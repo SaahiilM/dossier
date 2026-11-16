@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { toast } from "@/components/toast";
 import type { ProfileData, ProjectItem } from "@/lib/profile";
+import { emptyWorkAuthorization } from "@/lib/work-authorization";
 
 import { attachNewProjectSkill, createProject, removeProject, reorderEntries, restoreProject, saveProject, setProjectSkill } from "./actions";
 import { ProjectsSection } from "./projects-section";
@@ -52,6 +53,7 @@ function Harness() {
     references: [],
     customSections: [],
     facts: [],
+    workAuthorization: emptyWorkAuthorization(),
     photo: null,
   });
   useEffect(() => {

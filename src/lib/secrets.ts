@@ -18,6 +18,8 @@ export const AI_API_KEY: SecretKind = { purpose: "api-key-encryption", associate
 export const JOB_SOURCE_KEY: SecretKind = { purpose: "job-source-key-encryption", associatedData: "dossier job source key v1" };
 /** The TypeSafe key Jev scores postings with (#274). */
 export const TYPESAFE_KEY: SecretKind = { purpose: "typesafe-key-encryption", associatedData: "dossier typesafe key v1" };
+/** Independent OpenRouter key for posting judgments. */
+export const OPENROUTER_SCORING_KEY: SecretKind = { purpose: "openrouter-scoring-key-encryption", associatedData: "dossier openrouter scoring key v1" };
 /** The Google account's refresh token (E15-1). */
 export const GOOGLE_TOKEN: SecretKind = { purpose: "google-token-encryption", associatedData: "dossier google token v1" };
 /** The Google OAuth client's secret, entered in Settings → Google. */

@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { toast } from "@/components/toast";
 import type { EntryOrder, ExperienceItem, ProfileData } from "@/lib/profile";
+import { emptyWorkAuthorization } from "@/lib/work-authorization";
 
 import {
   attachNewSkill,
@@ -67,6 +68,7 @@ function Harness({ order = "date", volunteering = false }: { order?: EntryOrder;
     references: [],
     customSections: [],
     facts: [],
+    workAuthorization: emptyWorkAuthorization(),
     photo: null,
   });
   useEffect(() => {
@@ -177,7 +179,7 @@ describe("ExperienceSection", () => {
 
   it("shows the empty state", () => {
     function Empty() {
-      const [state, setState] = useState<ProfileData>({ basics: {} as ProfileData["basics"], skills: [], languages: [], experience: [], projects: [], education: [], certifications: [], publications: [], references: [], customSections: [], facts: [], photo: null });
+      const [state, setState] = useState<ProfileData>({ basics: {} as ProfileData["basics"], skills: [], languages: [], experience: [], projects: [], education: [], certifications: [], publications: [], references: [], customSections: [], facts: [], workAuthorization: emptyWorkAuthorization(), photo: null });
       return <ExperienceSection order="date" profile={state} update={(change) => setState(change)} />;
     }
     render(<Empty />);

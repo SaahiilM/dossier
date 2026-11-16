@@ -138,7 +138,7 @@ export function ApplicationsScreen({ params, rows, counts, summary, empty, archi
         <FirstApplication />
       ) : (
         <>
-          <div className="flex flex-wrap items-center gap-3 px-10 pb-[18px]">
+          <div className="flex flex-wrap items-center gap-3 px-4 pb-[18px] sm:px-10">
             <input
               type="search"
               aria-label="Search applications"
@@ -197,14 +197,14 @@ export function ApplicationsScreen({ params, rows, counts, summary, empty, archi
 /** When the search or filter leaves nothing to show. */
 function Nothing({ children }: { children: ReactNode }) {
   return (
-    <div className="mx-10 mb-16 rounded-panel border border-line-card bg-card px-5 py-9 text-center text-sm text-muted">{children}</div>
+    <div className="mx-4 mb-16 rounded-panel border border-line-card bg-card px-5 py-9 text-center text-sm text-muted sm:mx-10">{children}</div>
   );
 }
 
 /** Before the first application: where to start. */
 function FirstApplication() {
   return (
-    <div className="mx-10 mb-16 flex max-w-[640px] flex-col items-start gap-3 rounded-panel border border-line-card bg-card px-7 py-7">
+    <div className="mx-4 mb-16 flex max-w-[640px] flex-col items-start gap-3 rounded-panel border border-line-card bg-card px-5 py-6 sm:mx-10 sm:px-7 sm:py-7">
       <h2 className="font-serif text-section">Your first application</h2>
       <p className="text-sm text-muted">
         Paste a job posting and I&apos;ll read it, check it against your profile and draft a tailored resume and cover letter. Your

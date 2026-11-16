@@ -21,15 +21,15 @@ export function PageHeader({ title, description, actions, before }: PageHeaderPr
   return (
     <>
       <PageBar>
-        <div className="flex min-w-0 items-center gap-3">
+        <div className="flex min-w-0 basis-full items-center gap-2 md:basis-auto md:flex-1 sm:gap-3">
           {before ?? <PageBarIcon />}
-          <h1 className="font-serif text-title text-pretty">{title}</h1>
+          <h1 className="min-w-0 break-words font-serif text-[28px] leading-tight sm:text-title text-pretty">{title}</h1>
         </div>
-        {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
+        {actions && <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">{actions}</div>}
       </PageBar>
       {/* The screen's content starts 32px under the bar, after the description if there is one. */}
       {description ? (
-        <p className="max-w-[620px] px-10 pt-1 pb-8 text-lead text-pretty text-muted">{description}</p>
+        <p className="max-w-[620px] px-4 pt-1 pb-6 text-lead text-pretty text-muted sm:px-10 sm:pb-8">{description}</p>
       ) : (
         <div aria-hidden="true" className="h-8" />
       )}
@@ -47,8 +47,8 @@ export function PageBar({ children }: { children: ReactNode }) {
     // -mx-px: over the panel's side borders, so the bar's own line up with them.
     // pt-2: the shell's 8px above the panel, as at its sides and bottom; it
     // stays while the bar sticks, so nothing scrolls by above it.
-    <div className="sticky top-0 z-20 -mx-px bg-paper pt-2">
-      <div className="flex min-h-12 flex-wrap items-center justify-between gap-x-6 gap-y-3 rounded-t-panel border border-b-0 border-line-card bg-surface px-10 pt-7 pb-4">
+    <div className="sticky top-0 z-20 -mx-px bg-paper pt-0 sm:pt-2">
+      <div className="flex min-h-12 flex-wrap items-center justify-between gap-x-3 gap-y-2 rounded-t-panel border border-b-0 border-line-card bg-surface px-4 pt-4 pb-3 sm:gap-x-6 sm:gap-y-3 sm:px-10 sm:pt-7 sm:pb-4">
         {children}
       </div>
     </div>

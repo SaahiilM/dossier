@@ -4,6 +4,7 @@ import { useState } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { ProfileData } from "@/lib/profile";
+import { emptyWorkAuthorization } from "@/lib/work-authorization";
 
 import { createReference, saveEducation, saveReference } from "./actions";
 import { EducationSection } from "./education-section";
@@ -37,6 +38,7 @@ const profile: ProfileData = {
   ],
   customSections: [],
   facts: [],
+  workAuthorization: emptyWorkAuthorization(),
   photo: null,
 };
 

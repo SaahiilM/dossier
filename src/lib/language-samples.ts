@@ -1,4 +1,5 @@
 import type { ProfileData } from "@/lib/profile";
+import { emptyWorkAuthorization } from "@/lib/work-authorization";
 
 // A short resume in each built-in document language (SET-7), to check that
 // every script renders with the bundled fonts, in the right direction, in the
@@ -352,6 +353,7 @@ export function sampleProfile(sample: Sample): ProfileData {
     references: [],
     customSections: [],
     facts: [],
+    workAuthorization: emptyWorkAuthorization(),
     photo: null,
   };
 }

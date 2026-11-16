@@ -9,7 +9,11 @@ import { loadSettings } from "@/lib/settings-data";
 import { lastKnownTimeZone } from "@/lib/time-zone";
 import type { AgentSearchRun } from "@/lib/settings";
 
-import { stringsOf } from "./candidates";
+import { fitAutoDraftBlocked, type PostingFitReview } from "@/lib/fit";
+import { loadProfile } from "@/lib/profile-data";
+import { loadScoringConfig } from "@/lib/scoring/config";
+
+import { postingFitFromCandidate, stringsOf } from "./candidates";
 import { AGENT_JOB_KEY } from "./jobs";
 import { agentSetupProblem } from "./run";
 import { interruptedRunMessage, nextSourceBudgetAt, sourceRequestsInPastDay } from "./runs";
@@ -41,6 +45,12 @@ export type AgentCandidateView = {
   applicationId: string | null;
   /** The job preparing its draft, while one is queued or running. */
   draftJobId: string | null;
+  /** Saved score no longer matches profile or scorer settings. */
+  scoreStale: boolean;
+  /** Structured eligibility from persisted meta. */
+  scoreReview: PostingFitReview | null;
+  /** Auto-draft must stay off (staleness, missing meta, or eligibility). */
+  autoDraftBlocked: boolean;
 };
 
 export type AgentView = {
@@ -93,8 +103,32 @@ const posted = (ago: string) => (ago === "Today" || ago === "Yesterday" ? ago.to
 const sectionOf = (problem: string): AgentView["setupSection"] =>
   problem.includes("AI provider") ? "ai" : problem.includes("Scoring") ? "scoring" : problem.includes("Job search") ? "jobs" : "agent";
 
+/** How many queue items are stale, need review, or block auto-draft (persisted meta). */
+export async function agentQueueFitSummary(now = new Date()) {
+  const [settings, profile, config, candidates] = await Promise.all([
+    loadSettings(),
+    loadProfile(),
+    loadScoringConfig(),
+    prisma.agentCandidate.findMany({
+      where: {
+        status: { in: [AgentCandidateStatus.SCORED, AgentCandidateStatus.DRAFTING, AgentCandidateStatus.DRAFTED] },
+      },
+    }),
+  ]);
+  let stale = 0;
+  let needsReview = 0;
+  let autoDraftBlocked = 0;
+  for (const row of candidates) {
+    const fit = postingFitFromCandidate(row, profile, config, now);
+    if (fit.stale) stale += 1;
+    if (fit.meta?.review === "needs_review" || fit.meta?.review === "ineligible") needsReview += 1;
+    if (fitAutoDraftBlocked(fit) && row.score >= settings.agentMinScore) autoDraftBlocked += 1;
+  }
+  return { stale, needsReview, autoDraftBlocked };
+}
+
 export async function loadAgentView(now = new Date()): Promise<AgentView> {
-  const [settings, timeZone, candidates, draftJobs, runJobs, searches] = await Promise.all([
+  const [settings, timeZone, candidates, draftJobs, runJobs, searches, profile, config] = await Promise.all([
     loadSettings(),
     lastKnownTimeZone(),
     prisma.agentCandidate.findMany({
@@ -108,6 +142,8 @@ export async function loadAgentView(now = new Date()): Promise<AgentView> {
     }),
     prisma.job.findMany({ where: { key: AGENT_JOB_KEY, status: { in: [JobStatus.QUEUED, JobStatus.RUNNING] } }, select: { id: true }, take: 1 }),
     listAgentSearches(),
+    loadProfile(),
+    loadScoringConfig(),
   ]);
   // Present an interrupted reservation even when quota prevents another run.
   // This is read-only: taking the scan lock on render can reject the very job
@@ -120,27 +156,33 @@ export async function loadAgentView(now = new Date()): Promise<AgentView> {
 
   const setupProblem = await agentSetupProblem();
 
-  const view = (candidate: (typeof candidates)[number]): AgentCandidateView => ({
-    searches: candidate.searches,
-    id: candidate.id,
-    title: candidate.title.trim() || "Untitled posting",
-    company: candidate.company.trim(),
-    facts: [candidate.place, candidate.remote ? "Remote" : "", candidate.salary].filter(Boolean).join(" · "),
-    origin: [
-      candidate.postedAt ? `Posted ${posted(postedAgo(candidate.postedAt.toISOString(), now))}` : "",
-      [candidate.via ? `via ${candidate.via}` : "", `on ${SOURCE_INFO[candidate.source].name}`].filter(Boolean).join(" "),
-    ]
-      .filter(Boolean)
-      .join(" · "),
-    source: candidate.source,
-    url: candidate.url,
-    score: candidate.score,
-    reasons: stringsOf(candidate.reasons),
-    redFlags: stringsOf(candidate.redFlags),
-    error: candidate.error,
-    applicationId: candidate.applicationId,
-    draftJobId: draftJob.get(candidate.id) ?? null,
-  });
+  const view = (candidate: (typeof candidates)[number]): AgentCandidateView => {
+    const fit = postingFitFromCandidate(candidate, profile, config, now);
+    return {
+      searches: candidate.searches,
+      id: candidate.id,
+      title: candidate.title.trim() || "Untitled posting",
+      company: candidate.company.trim(),
+      facts: [candidate.place, candidate.remote ? "Remote" : "", candidate.salary].filter(Boolean).join(" · "),
+      origin: [
+        candidate.postedAt ? `Posted ${posted(postedAgo(candidate.postedAt.toISOString(), now))}` : "",
+        [candidate.via ? `via ${candidate.via}` : "", `on ${SOURCE_INFO[candidate.source].name}`].filter(Boolean).join(" "),
+      ]
+        .filter(Boolean)
+        .join(" · "),
+      source: candidate.source,
+      url: candidate.url,
+      score: candidate.score,
+      reasons: stringsOf(candidate.reasons),
+      redFlags: stringsOf(candidate.redFlags),
+      error: candidate.error,
+      applicationId: candidate.applicationId,
+      draftJobId: draftJob.get(candidate.id) ?? null,
+      scoreStale: fit.stale === true,
+      scoreReview: fit.meta?.review ?? null,
+      autoDraftBlocked: fitAutoDraftBlocked(fit),
+    };
+  };
   const drafts = candidates.filter((candidate) => candidate.status === AgentCandidateStatus.DRAFTED && candidate.applicationId).map(view);
   const waiting = candidates.filter((candidate) => candidate.status !== AgentCandidateStatus.DRAFTED);
   const last = settings.agentRuns[0];

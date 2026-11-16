@@ -22,6 +22,21 @@ const answer = { score: 86, reasons: ["Built and maintained a design system at N
 const sent = (provider: MockProvider): ChatCall => provider.calls[0];
 
 describe("scorePosting (E16-2)", () => {
+  it("sends work authorization only in the score-posting prompt, not in profileForPrompt", async () => {
+    const withAuth = {
+      ...profile,
+      workAuthorization: { ...profile.workAuthorization, authorizedCountries: ["Canada"], needsSponsorshipNow: false },
+    };
+    const provider = new MockProvider({ reply: () => answer });
+    await scorePosting(provider, { ...input, profile: withAuth }, options);
+    const text = sent(provider).messages[0].content;
+    expect(text).toContain("Work authorization the candidate entered for scoring only");
+    expect(text).toContain("authorizedCountries");
+    expect(JSON.parse(text.split("The candidate's profile:\n")[1].split("\n\nWork authorization")[0])).not.toHaveProperty(
+      "workAuthorization",
+    );
+  });
+
   it("sends the posting as material, the facts and the profile without contact details or references", async () => {
     const provider = new MockProvider({ reply: () => answer });
     const { data, promptVersion } = await scorePosting(provider, input, options);

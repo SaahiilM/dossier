@@ -45,7 +45,11 @@ describe("postingLines (#274)", () => {
 
   it("drops headings, markdown, invisible characters, repeats and lines too short to say anything", () => {
     const text = ["**Requirements:**", "- **Strong** Python skills\u200b", "* Strong Python skills", "1. Docker", "2) Experience with Kubernetes in production"].join("\n");
-    expect(postingLines(text)).toEqual(["Strong Python skills", "Experience with Kubernetes in production"]);
+    expect(postingLines(text)).toEqual(["Strong Python skills", "Docker", "Experience with Kubernetes in production"]);
+  });
+
+  it("keeps one-word bullets in requirement lists", () => {
+    expect(postingLines("Requirements:\n- Python\n- Kubernetes\n- AWS\n- Fluent German")).toEqual(["Python", "Kubernetes", "AWS", "Fluent German"]);
   });
 
   it("cuts a line too long to quote at a word", () => {

@@ -13,10 +13,21 @@ describe("the setup guide's AI choices (E21-2)", () => {
     }
     for (const choice of AI_CHOICES) {
       const local = choice.provider === AiProvider.LOCAL || choice.provider === AiProvider.LMSTUDIO;
-      expect(choice.cost.startsWith("Free"), choice.id).toBe(local);
-      expect(choice.key === null, choice.id).toBe(local);
-      expect(Boolean(choice.needs), choice.id).toBe(local);
+      const subscription = choice.subscription === true;
+      if (local) {
+        expect(choice.cost.startsWith("Free"), choice.id).toBe(true);
+        expect(choice.key === null, choice.id).toBe(true);
+        expect(Boolean(choice.needs), choice.id).toBe(true);
+      } else if (subscription) {
+        expect(choice.key, choice.id).toBeNull();
+        expect(choice.cost, choice.id).not.toMatch(/buy credit|API key/i);
+      }
     }
+  });
+
+  it("maps subscription providers back to the guide's choices", () => {
+    expect(choiceOf(AiProvider.CHATGPT_SUBSCRIPTION, "")).toBe("chatgpt_subscription");
+    expect(choiceOf(AiProvider.CLAUDE_CLI, "")).toBe("claude_cli");
   });
 
   it("link only to https pages, and say what each costs and where the data goes", () => {

@@ -85,6 +85,13 @@ export const SECTIONS = [
     hint: "The languages you speak, and how well.",
   },
   {
+    id: "workAuthorization",
+    optional: true,
+    label: "Work authorization",
+    title: "Work authorization",
+    hint: "Where you can work, whether you need sponsorship, and relocation — in your own words. Used for job matching and the AI only; not added to resumes or cover letters automatically.",
+  },
+  {
     id: "facts",
     optional: true,
     label: "Facts about me",

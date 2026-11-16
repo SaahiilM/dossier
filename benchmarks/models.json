@@ -1,0 +1,29 @@
+{
+  "checkedAt": "2026-11-12",
+  "catalogList": "https://openrouter.ai/api/v1/models?output_modalities=decisions",
+  "decisionsUrl": "https://openrouter.ai/api/alpha/decisions",
+  "decisionsDocs": "https://openrouter.ai/docs/api/api-reference/alphadecisions/submit-a-decisions-request",
+  "models": [
+    {
+      "id": "perplexity/pplx-decider-v1.3:free",
+      "canonicalSnapshot": "perplexity/pplx-decider-v1.3-20261112",
+      "billing": "free",
+      "budgetUsd": null,
+      "endpointsUrl": "https://openrouter.ai/api/v1/models/perplexity/pplx-decider-v1.3:free/endpoints"
+    },
+    {
+      "id": "parallel/decisions-fast:free",
+      "canonicalSnapshot": "parallel/decisions-fast-20261106",
+      "billing": "free",
+      "budgetUsd": null,
+      "endpointsUrl": "https://openrouter.ai/api/v1/models/parallel/decisions-fast:free/endpoints"
+    },
+    {
+      "id": "typesafe/jev-1.14",
+      "canonicalSnapshot": "typesafe/jev-1.14-20261014",
+      "billing": "paid",
+      "budgetUsd": 0.25,
+      "endpointsUrl": "https://openrouter.ai/api/v1/models/typesafe/jev-1.14/endpoints"
+    }
+  ]
+}

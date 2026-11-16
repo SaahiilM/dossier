@@ -4,8 +4,11 @@ import { AiProvider } from "@/generated/prisma/enums";
 import { env, type Env } from "@/lib/env";
 import { loadSettings } from "@/lib/settings-data";
 
+import { credential, status as listChatGptAccounts } from "@/lib/siwc";
+
 import { API_KEY_UNREADABLE, ApiKeyUnreadable, apiKeyState, decryptApiKey } from "./api-key";
 import { DEFAULT_TIMEOUT_SECONDS, type AiSettingsView, type KeyState } from "./provider-options";
+import { ClaudeCliProvider } from "./providers/claude-cli";
 
 // Which provider to use and how to reach it (E6-1): what's saved in Settings,
 // or else the DOSSIER_AI_* variables, or else the defaults below.
@@ -18,6 +21,8 @@ export type AiConfig = {
   /** Why the saved key can't be used, e.g. DOSSIER_SECRET changed. */
   apiKeyProblem: string | null;
   timeoutMs: number;
+  /** Effective ChatGPT SIWC account when the provider is CHATGPT_SUBSCRIPTION. */
+  chatGptAccountSub: string | null;
 };
 
 export const PROVIDER_DEFAULTS: Record<AiProvider, { baseUrl: string; model: string | null; timeoutSeconds: number }> = {
@@ -26,6 +31,9 @@ export const PROVIDER_DEFAULTS: Record<AiProvider, { baseUrl: string; model: str
   [AiProvider.ANTHROPIC]: { baseUrl: "https://api.anthropic.com", model: "claude-sonnet-5-5", timeoutSeconds: DEFAULT_TIMEOUT_SECONDS.hosted },
   [AiProvider.MISTRAL]: { baseUrl: "https://api.mistral.ai/v1", model: "mistral-small-2603", timeoutSeconds: DEFAULT_TIMEOUT_SECONDS.hosted },
   [AiProvider.LMSTUDIO]: { baseUrl: "http://host.docker.internal:1234", model: null, timeoutSeconds: DEFAULT_TIMEOUT_SECONDS.local },
+  [AiProvider.OPENROUTER]: { baseUrl: "https://openrouter.ai/api/v1", model: null, timeoutSeconds: DEFAULT_TIMEOUT_SECONDS.hosted },
+  [AiProvider.CHATGPT_SUBSCRIPTION]: { baseUrl: "", model: null, timeoutSeconds: DEFAULT_TIMEOUT_SECONDS.hosted },
+  [AiProvider.CLAUDE_CLI]: { baseUrl: "", model: null, timeoutSeconds: DEFAULT_TIMEOUT_SECONDS.hosted },
 };
 
 const FROM_ENV: Record<NonNullable<Env["DOSSIER_AI_PROVIDER"]>, AiProvider> = {
@@ -34,6 +42,9 @@ const FROM_ENV: Record<NonNullable<Env["DOSSIER_AI_PROVIDER"]>, AiProvider> = {
   anthropic: AiProvider.ANTHROPIC,
   mistral: AiProvider.MISTRAL,
   lmstudio: AiProvider.LMSTUDIO,
+  openrouter: AiProvider.OPENROUTER,
+  chatgpt_subscription: AiProvider.CHATGPT_SUBSCRIPTION,
+  claude_cli: AiProvider.CLAUDE_CLI,
 };
 
 type SavedSettings = {
@@ -41,6 +52,7 @@ type SavedSettings = {
   baseUrl: string | null;
   model: string | null;
   apiKeyEnc: string | null;
+  chatGptAccountSub?: string | null;
   /** Missing in tests that predate it. */
   aiTimeoutSeconds?: number | null;
 };
@@ -82,9 +94,16 @@ export function resolveAiConfig(saved: SavedSettings | null, source: AiEnv, secr
     model: (useSaved ? saved!.model : source.DOSSIER_AI_MODEL) || defaults.model,
     apiKey,
     apiKeyProblem,
-    // Settings → AI provider's timeout, whichever provider (public issue 118).
     timeoutMs: (saved?.aiTimeoutSeconds ?? source.DOSSIER_AI_TIMEOUT_SECONDS ?? defaults.timeoutSeconds) * 1000,
+    chatGptAccountSub: saved?.chatGptAccountSub ?? null,
   };
+}
+
+async function effectiveChatGptAccountSub(savedSub: string | null): Promise<string | null> {
+  const accounts = await listChatGptAccounts();
+  if (accounts.length === 0) return null;
+  if (savedSub && accounts.some((row) => row.sub === savedSub)) return savedSub;
+  return accounts[0]!.sub;
 }
 
 /**
@@ -103,7 +122,10 @@ export function sameServer(provider: AiProvider, a: string | null | undefined, b
 
 /** The AI configuration in effect right now. */
 export async function loadAiConfig(): Promise<AiConfig> {
-  return resolveAiConfig(await loadSettings(), env);
+  const saved = await loadSettings();
+  const config = resolveAiConfig(saved, env);
+  if (config.provider !== AiProvider.CHATGPT_SUBSCRIPTION) return config;
+  return { ...config, chatGptAccountSub: await effectiveChatGptAccountSub(config.chatGptAccountSub) };
 }
 
 /**
@@ -118,7 +140,8 @@ export async function loadAiSettingsView(): Promise<AiSettingsView> {
     baseUrl: config.baseUrl,
     model: config.model ?? "",
     keyState: keyStateOf(saved, config),
-    timeoutSeconds: saved.aiTimeoutSeconds,
+    chatGptAccountSub: saved.chatGptAccountSub ?? "",
+    timeoutSeconds: saved.aiTimeoutSeconds ?? null,
     envTimeoutSeconds: env.DOSSIER_AI_TIMEOUT_SECONDS ?? null,
   };
 }
@@ -145,6 +168,20 @@ export async function isAiUsable(): Promise<boolean> {
   if (!(await isAiConfigured())) return false;
   const config = await loadAiConfig();
   if (!config.model || config.apiKeyProblem) return false;
-  const needsKey = config.provider === AiProvider.ANTHROPIC || config.provider === AiProvider.MISTRAL;
+  if (config.provider === AiProvider.CHATGPT_SUBSCRIPTION) {
+    if (!config.model || !config.chatGptAccountSub) return false;
+    try {
+      await credential(config.chatGptAccountSub);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+  if (config.provider === AiProvider.CLAUDE_CLI) {
+    if (!config.model) return false;
+    const auth = await new ClaudeCliProvider({ model: config.model }).authStatus(AbortSignal.timeout(10_000));
+    return auth === "authenticated";
+  }
+  const needsKey = config.provider === AiProvider.ANTHROPIC || config.provider === AiProvider.MISTRAL || config.provider === AiProvider.OPENROUTER;
   return !needsKey || Boolean(config.apiKey);
 }

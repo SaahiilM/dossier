@@ -12,17 +12,20 @@ import { JobSearchError } from "@/lib/job-search/errors";
 import { postingKey, type FoundPosting } from "@/lib/job-search/search";
 import { startJob, type JobContext } from "@/lib/jobs/runner";
 import { logServerError } from "@/lib/log";
+import { fitAutoDraftBlocked } from "@/lib/fit";
 import { saveScore } from "@/lib/posting-scores";
 import { postingStates } from "@/lib/postings";
 import { prisma } from "@/lib/prisma";
 import { loadProfile } from "@/lib/profile-data";
+import { loadScoringConfig } from "@/lib/scoring/config";
+import { scoreInputFingerprint } from "@/lib/scoring/fingerprint";
 import { loadPostingScorer, scoringProblem } from "@/lib/scoring";
 import { loadSettings } from "@/lib/settings-data";
 import type { SettingsData, AgentSearchRun } from "@/lib/settings";
 import { lastKnownTimeZone } from "@/lib/time-zone";
 
 import { attributeAgentCandidates } from "./attribution";
-import { agentDedupeKey, candidateData } from "./candidates";
+import { agentDedupeKey, candidateData, postingFitFromCandidate } from "./candidates";
 import { agentDraftJob, draftJobKey } from "./draft";
 import { reconcileInterruptedRuns, recordRunEnd, recordSourceRequest, reserveRun } from "./runs";
 import { listAgentSearches } from "./searches";
@@ -212,7 +215,8 @@ export async function evaluateAgentPostings(postings: readonly FoundPosting[], c
 
   const toScore = fresh.slice(0, settings.agentMaxScores);
   await context.step(`Scoring ${toScore.length} ${toScore.length === 1 ? "posting" : "postings"}`);
-  const [score, profile] = await Promise.all([loadPostingScorer(), loadProfile()]);
+  const referenceDate = new Date();
+  const [score, profile, config] = await Promise.all([loadPostingScorer(), loadProfile(), loadScoringConfig()]);
   let scored = 0;
   let queued = 0;
   const kept: string[] = [];
@@ -225,9 +229,13 @@ export async function evaluateAgentPostings(postings: readonly FoundPosting[], c
       // Respect cancellation before writing, but this is not an atomic fence
       // against imports/wipes; that needs the broader background-job lifecycle.
       if (context.signal.aborted) break;
-      const candidate = await prisma.agentCandidate.create({ data: candidateData(posting, data), select: { id: true } });
+      const inputFingerprint = scoreInputFingerprint(profile, posting, config, referenceDate);
+      const candidate = await prisma.agentCandidate.create({
+        data: candidateData(posting, data, scoredWith, inputFingerprint),
+        select: { id: true },
+      });
       // Find jobs shows it too (#208).
-      await saveScore(posting, data, scoredWith);
+      await saveScore(posting, data, scoredWith, inputFingerprint);
       kept.push(candidate.id);
       scored += 1;
       if (data.score >= settings.agentMinScore) queued += 1;
@@ -243,12 +251,29 @@ export async function evaluateAgentPostings(postings: readonly FoundPosting[], c
   // Auto-draft (#197, off by default): the best of this run's, one job each.
   let drafted = 0;
   if (settings.agentAutoDraft && settings.agentMaxDrafts > 0 && !context.signal.aborted) {
-    const best = await prisma.agentCandidate.findMany({
+    const rows = await prisma.agentCandidate.findMany({
       where: { id: { in: kept }, status: AgentCandidateStatus.SCORED, score: { gte: settings.agentMinScore } },
-      orderBy: { score: "desc" },
-      take: settings.agentMaxDrafts,
-      select: { id: true },
+      select: {
+        id: true,
+        score: true,
+        reasons: true,
+        redFlags: true,
+        meta: true,
+        scoredWith: true,
+        inputFingerprint: true,
+        title: true,
+        company: true,
+        place: true,
+        remote: true,
+        salary: true,
+        description: true,
+      },
     });
+    const draftable = rows
+      .filter((row) => !fitAutoDraftBlocked(postingFitFromCandidate(row, profile, config, referenceDate)))
+      .toSorted((a, b) => b.score - a.score)
+      .slice(0, settings.agentMaxDrafts);
+    const best = draftable.map((row) => ({ id: row.id }));
     for (const { id } of best) await startJob(agentDraftJob, { candidateId: id }, { key: draftJobKey(id) });
     drafted = best.length;
   }

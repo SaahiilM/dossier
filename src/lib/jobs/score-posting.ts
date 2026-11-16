@@ -6,6 +6,8 @@ import { fullText } from "@/lib/job-search/find";
 import { foundPostingSchema, postingKey, type FoundPosting } from "@/lib/job-search/search";
 import { saveScore } from "@/lib/posting-scores";
 import { loadProfile } from "@/lib/profile-data";
+import { loadScoringConfig } from "@/lib/scoring/config";
+import { scoreInputFingerprint } from "@/lib/scoring/fingerprint";
 import { loadPostingScorer } from "@/lib/scoring";
 
 import { defineJob } from "./runner";
@@ -30,9 +32,11 @@ export const scorePostingJob = defineJob({
       description = (await fullText(posting)) ?? posting.description;
     }
     await step("Scoring it against your profile");
-    const [score, profile] = await Promise.all([loadPostingScorer(), loadProfile()]);
-    const { data, scoredWith } = await score({ ...posting, description }, profile, signal);
-    await saveScore(posting, data, scoredWith);
+    const referenceDate = new Date();
+    const [score, profile, config] = await Promise.all([loadPostingScorer(), loadProfile(), loadScoringConfig()]);
+    const full = { ...posting, description };
+    const { data, scoredWith } = await score(full, profile, signal);
+    await saveScore(full, data, scoredWith, scoreInputFingerprint(profile, full, config, referenceDate));
     return data;
   },
 });
@@ -56,7 +60,7 @@ export const scorePastedPostingJob = defineJob({
   async run({ posting, title, company, location, mode, salary }, { step, signal }) {
     await step("Scoring it against your profile");
     const [score, profile] = await Promise.all([loadPostingScorer(), loadProfile()]);
-    const remote = /\b(remote|home ?office|hybrid)\b/i.test(mode) ? true : null;
+    const remote = /\b(remote|home ?office)\b/i.test(mode) && !/\bhybrid\b/i.test(mode) ? true : null;
     const { data } = await score({ title, company, place: location, remote, salary, description: posting }, profile, signal);
     return data;
   },

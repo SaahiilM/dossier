@@ -1,0 +1,8 @@
+-- AlterTable
+ALTER TABLE "AgentCandidate" ADD COLUMN "meta" JSONB;
+ALTER TABLE "AgentCandidate" ADD COLUMN "inputFingerprint" TEXT;
+ALTER TABLE "AgentCandidate" ADD COLUMN "scoredWith" TEXT NOT NULL DEFAULT '';
+
+-- AlterTable
+ALTER TABLE "PostingScore" ADD COLUMN "meta" JSONB;
+ALTER TABLE "PostingScore" ADD COLUMN "inputFingerprint" TEXT;

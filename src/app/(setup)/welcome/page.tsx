@@ -11,6 +11,7 @@ import { SCORER_INFO } from "@/lib/scoring/scorers";
 import { jobRetentionLabel } from "@/lib/settings";
 import { loadScoringConfig, scoringView } from "@/lib/scoring/config";
 import { providerOption } from "@/lib/ai/provider-options";
+import { isDesktopApp } from "@/lib/desktop";
 import { env } from "@/lib/env";
 import { redirectUri } from "@/lib/google/oauth";
 import { loadSettings } from "@/lib/settings-data";
@@ -123,11 +124,13 @@ export default async function WelcomePage({ searchParams }: PageProps<"/welcome"
         lead="It reads job postings and writes your resumes and cover letters. Pick what matters most to you, and the guide shows you where to go, what to click and what to copy back here."
       >
         <AiStep
+          inDesktopApp={isDesktopApp()}
           current={{
             usable,
             name: choice ? aiChoice(choice).name : providerOption(view.provider).name,
             model: view.model,
             choice,
+            chatGptAccountSub: view.chatGptAccountSub,
             fromEnv: !settings.provider && Boolean(env.DOSSIER_AI_PROVIDER),
           }}
         />
@@ -155,7 +158,14 @@ export default async function WelcomePage({ searchParams }: PageProps<"/welcome"
       <SetupFrame
         step="scoring"
         title="How to judge a posting"
-        complete={view.scorer === "AI" || view.keyState === "set" || view.keyState === "env"}
+        complete={
+          view.scorer === "AI" ||
+          (view.scorer === "JEV" && (view.keyState === "set" || view.keyState === "env")) ||
+          (view.scorer === "OPENROUTER_DECISIONS" && (view.openRouterKeyState === "set" || view.openRouterKeyState === "env")) ||
+          (view.scorer === "OPENROUTER" &&
+            Boolean(view.openRouterModel.trim()) &&
+            (view.openRouterKeyState === "set" || view.openRouterKeyState === "env"))
+        }
         lead="Score in Find jobs and the job agent say how well a posting fits your profile, so you can see the good ones first. Your resumes and letters are always written by your AI."
       >
         <ScoringStep initial={view} />

@@ -23,6 +23,9 @@ linux:
 win:
   icon: assets/icon.png
   target: [nsis]
+mac:
+  icon: assets/icon.png
+  target: [dmg, zip]
 nsis:
   # For this user, with no admin rights needed, and a new version installs over the old one.
   oneClick: true

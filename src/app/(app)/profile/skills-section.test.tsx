@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { toast } from "@/components/toast";
 import type { ProfileData } from "@/lib/profile";
+import { emptyWorkAuthorization } from "@/lib/work-authorization";
 
 import { addLanguage, addSkill, removeLanguage, removeSkill, renameSkillGroup, reorderSkills, setLanguageLevel, setSkillGroup, setSkillOrder } from "./actions";
 import { LanguagesSection, SkillsSection } from "./skills-section";
@@ -41,6 +42,7 @@ const profile = (): ProfileData => ({
   references: [],
   customSections: [],
   facts: [],
+  workAuthorization: emptyWorkAuthorization(),
   photo: null,
 });
 

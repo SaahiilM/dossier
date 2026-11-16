@@ -10,9 +10,18 @@ const SECRET_MIN_LENGTH = 32;
 const GENERATE_SECRET = "for example the output of `openssl rand -base64 32`";
 const HASH_PASSWORD = "Make one with `docker run --rm -it ghcr.io/aientech/dossier hash-password`";
 
-export const AI_PROVIDERS = ["local", "openai", "anthropic", "mistral", "lmstudio"] as const;
+export const AI_PROVIDERS = [
+  "local",
+  "openai",
+  "anthropic",
+  "mistral",
+  "lmstudio",
+  "openrouter",
+  "chatgpt_subscription",
+  "claude_cli",
+] as const;
 export const JOB_SOURCE_NAMES = ["jsearch", "adzuna", "arbeitsagentur", "freehire", "off"] as const;
-export const SCORER_NAMES = ["ai", "jev"] as const;
+export const SCORER_NAMES = ["ai", "jev", "openrouter", "openrouter-decisions"] as const;
 
 // An empty value (`DOSSIER_AI_KEY=` in .env) counts as unset.
 const unsetIfEmpty = (value: unknown) =>
@@ -144,7 +153,8 @@ const schema = z.object({
       .pipe(z.enum(["on", "off"], { error: (issue) => `DOSSIER_JOBS_ARBEITSAGENTUR must be on or off (got "${String(issue.input)}").` })),
   ),
   // Defaults for Settings → Scoring (#274), until a choice is saved there:
-  // ai scores postings with the AI provider, jev with TypeSafe's Jev.
+  // ai scores postings with the AI provider, jev with TypeSafe's Jev,
+  // openrouter with a chat model, openrouter-decisions with the decision API.
   DOSSIER_SCORER: optional(
     z
       .string()
@@ -154,6 +164,24 @@ const schema = z.object({
   ),
   // Never echo the value: it's an API key.
   DOSSIER_TYPESAFE_KEY: optional(z.string().trim()),
+  // OpenRouter scoring, separate from DOSSIER_AI_* (#274).
+  // OPENROUTER_API_KEY is not read for scoring unless the source below is
+  // openrouter_api_key, and only when this scoring key is unset.
+  DOSSIER_OPENROUTER_SCORING_KEY: optional(z.string().trim()),
+  DOSSIER_OPENROUTER_SCORING_MODEL: optional(z.string().trim()),
+  DOSSIER_OPENROUTER_SCORING_KEY_SOURCE: optional(
+    z
+      .string()
+      .trim()
+      .toLowerCase()
+      .pipe(
+        z.enum(["scoring", "openrouter_api_key"], {
+          error: (issue) =>
+            `DOSSIER_OPENROUTER_SCORING_KEY_SOURCE must be scoring or openrouter_api_key (got "${String(issue.input)}").`,
+        }),
+      ),
+  ),
+  OPENROUTER_API_KEY: optional(z.string().trim()),
   // Google sign-in for Gmail and Calendar (E15-1): an OAuth client of type
   // "Web application". Settings → Google can save one instead, which wins.
   // Never echo the secret.
