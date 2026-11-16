@@ -37,6 +37,7 @@ describe("stored settings", () => {
       model: null,
       chatGptAccountSub: null,
       apiKeyEnc: null,
+      aiTimeoutSeconds: null,
       creativity: "BALANCED",
       strict: true,
       showDiff: true,

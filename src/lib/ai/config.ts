@@ -7,8 +7,8 @@ import { loadSettings } from "@/lib/settings-data";
 import { credential, status as listChatGptAccounts } from "@/lib/siwc";
 
 import { API_KEY_UNREADABLE, ApiKeyUnreadable, apiKeyState, decryptApiKey } from "./api-key";
+import { DEFAULT_TIMEOUT_SECONDS, type AiSettingsView, type KeyState } from "./provider-options";
 import { ClaudeCliProvider } from "./providers/claude-cli";
-import type { AiSettingsView, KeyState } from "./provider-options";
 
 // Which provider to use and how to reach it (E6-1): what's saved in Settings,
 // or else the DOSSIER_AI_* variables, or else the defaults below.
@@ -26,16 +26,14 @@ export type AiConfig = {
 };
 
 export const PROVIDER_DEFAULTS: Record<AiProvider, { baseUrl: string; model: string | null; timeoutSeconds: number }> = {
-  // Generous: a local model on a laptop can take minutes for a cover letter.
-  [AiProvider.LOCAL]: { baseUrl: "http://localhost:11434", model: null, timeoutSeconds: 300 },
-  [AiProvider.OPENAI]: { baseUrl: "https://api.openai.com/v1", model: null, timeoutSeconds: 120 },
-  [AiProvider.ANTHROPIC]: { baseUrl: "https://api.anthropic.com", model: "claude-sonnet-5-5", timeoutSeconds: 120 },
-  [AiProvider.MISTRAL]: { baseUrl: "https://api.mistral.ai/v1", model: "mistral-small-2603", timeoutSeconds: 120 },
-  // As generous as a local model, and loading one can take a while too.
-  [AiProvider.LMSTUDIO]: { baseUrl: "http://host.docker.internal:1234", model: null, timeoutSeconds: 300 },
-  [AiProvider.OPENROUTER]: { baseUrl: "https://openrouter.ai/api/v1", model: null, timeoutSeconds: 120 },
-  [AiProvider.CHATGPT_SUBSCRIPTION]: { baseUrl: "", model: null, timeoutSeconds: 120 },
-  [AiProvider.CLAUDE_CLI]: { baseUrl: "", model: null, timeoutSeconds: 120 },
+  [AiProvider.LOCAL]: { baseUrl: "http://localhost:11434", model: null, timeoutSeconds: DEFAULT_TIMEOUT_SECONDS.local },
+  [AiProvider.OPENAI]: { baseUrl: "https://api.openai.com/v1", model: null, timeoutSeconds: DEFAULT_TIMEOUT_SECONDS.hosted },
+  [AiProvider.ANTHROPIC]: { baseUrl: "https://api.anthropic.com", model: "claude-sonnet-5-5", timeoutSeconds: DEFAULT_TIMEOUT_SECONDS.hosted },
+  [AiProvider.MISTRAL]: { baseUrl: "https://api.mistral.ai/v1", model: "mistral-small-2603", timeoutSeconds: DEFAULT_TIMEOUT_SECONDS.hosted },
+  [AiProvider.LMSTUDIO]: { baseUrl: "http://host.docker.internal:1234", model: null, timeoutSeconds: DEFAULT_TIMEOUT_SECONDS.local },
+  [AiProvider.OPENROUTER]: { baseUrl: "https://openrouter.ai/api/v1", model: null, timeoutSeconds: DEFAULT_TIMEOUT_SECONDS.hosted },
+  [AiProvider.CHATGPT_SUBSCRIPTION]: { baseUrl: "", model: null, timeoutSeconds: DEFAULT_TIMEOUT_SECONDS.hosted },
+  [AiProvider.CLAUDE_CLI]: { baseUrl: "", model: null, timeoutSeconds: DEFAULT_TIMEOUT_SECONDS.hosted },
 };
 
 const FROM_ENV: Record<NonNullable<Env["DOSSIER_AI_PROVIDER"]>, AiProvider> = {
@@ -55,6 +53,8 @@ type SavedSettings = {
   model: string | null;
   apiKeyEnc: string | null;
   chatGptAccountSub?: string | null;
+  /** Missing in tests that predate it. */
+  aiTimeoutSeconds?: number | null;
 };
 
 type AiEnv = Pick<
@@ -65,7 +65,9 @@ type AiEnv = Pick<
 /**
  * Settings win once a provider is saved there; until then the environment
  * decides. The two are never mixed, except that an env key still serves a
- * saved provider of the same kind that has no key of its own.
+ * saved provider of the same kind, on the same server, that has no key of
+ * its own. A timeout saved in Settings counts for any provider, before
+ * DOSSIER_AI_TIMEOUT_SECONDS.
  */
 export function resolveAiConfig(saved: SavedSettings | null, source: AiEnv, secret?: string): AiConfig {
   const envProvider = source.DOSSIER_AI_PROVIDER ? FROM_ENV[source.DOSSIER_AI_PROVIDER] : null;
@@ -82,7 +84,7 @@ export function resolveAiConfig(saved: SavedSettings | null, source: AiEnv, secr
       if (!(error instanceof ApiKeyUnreadable)) throw error;
       apiKeyProblem = API_KEY_UNREADABLE;
     }
-  } else if (!useSaved || envProvider === provider) {
+  } else if (!useSaved || (envProvider === provider && sameServer(provider, saved!.baseUrl, source.DOSSIER_AI_URL))) {
     apiKey = source.DOSSIER_AI_KEY ?? null;
   }
 
@@ -92,7 +94,7 @@ export function resolveAiConfig(saved: SavedSettings | null, source: AiEnv, secr
     model: (useSaved ? saved!.model : source.DOSSIER_AI_MODEL) || defaults.model,
     apiKey,
     apiKeyProblem,
-    timeoutMs: (source.DOSSIER_AI_TIMEOUT_SECONDS ?? defaults.timeoutSeconds) * 1000,
+    timeoutMs: (saved?.aiTimeoutSeconds ?? source.DOSSIER_AI_TIMEOUT_SECONDS ?? defaults.timeoutSeconds) * 1000,
     chatGptAccountSub: saved?.chatGptAccountSub ?? null,
   };
 }
@@ -102,6 +104,20 @@ async function effectiveChatGptAccountSub(savedSub: string | null): Promise<stri
   if (accounts.length === 0) return null;
   if (savedSub && accounts.some((row) => row.sub === savedSub)) return savedSub;
   return accounts[0]!.sub;
+}
+
+/**
+ * Whether two addresses of a provider are the same server (scheme, host and
+ * port), so a key for one may go to the other: another path is the same
+ * server, another host isn't. Empty means the provider's default address.
+ */
+export function sameServer(provider: AiProvider, a: string | null | undefined, b: string | null | undefined): boolean {
+  const origin = (address: string | null | undefined) => {
+    const url = address?.trim() || PROVIDER_DEFAULTS[provider].baseUrl;
+    return URL.canParse(url) ? new URL(url).origin : null;
+  };
+  const left = origin(a);
+  return left !== null && left === origin(b);
 }
 
 /** The AI configuration in effect right now. */
@@ -125,6 +141,8 @@ export async function loadAiSettingsView(): Promise<AiSettingsView> {
     model: config.model ?? "",
     keyState: keyStateOf(saved, config),
     chatGptAccountSub: saved.chatGptAccountSub ?? "",
+    timeoutSeconds: saved.aiTimeoutSeconds ?? null,
+    envTimeoutSeconds: env.DOSSIER_AI_TIMEOUT_SECONDS ?? null,
   };
 }
 

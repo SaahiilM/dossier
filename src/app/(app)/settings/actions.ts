@@ -9,9 +9,9 @@ import { action, ActionError } from "@/lib/action";
 import { lockAgentSearches } from "@/lib/agent/searches";
 import { AiError, createProvider } from "@/lib/ai";
 import { applyApiKeyChange } from "@/lib/ai/api-key";
-import { keyStateOf, loadAiConfig, PROVIDER_DEFAULTS, resolveAiConfig } from "@/lib/ai/config";
+import { keyStateOf, loadAiConfig, PROVIDER_DEFAULTS, resolveAiConfig, sameServer } from "@/lib/ai/config";
 import { OpenAICompatibleProvider } from "@/lib/ai/providers/openai-compatible";
-import type { KeyState } from "@/lib/ai/provider-options";
+import { AI_TIMEOUT_LIMITS, type KeyState } from "@/lib/ai/provider-options";
 import { DOCUMENT_LANGUAGES } from "@/lib/document-language";
 import { deleteAllBackups } from "@/lib/backups";
 import { env } from "@/lib/env";
@@ -45,25 +45,29 @@ async function currentKeyState(): Promise<KeyState> {
 
 /**
  * Saves the provider, server address and model (SET-1). A key belongs to
- * its provider: switching provider removes it, so it's never sent to
- * another company's server.
+ * its provider and server: another provider, or an address on another host
+ * (public PR 107), removes it, so it's never sent to a server it wasn't
+ * made for. Another path or model keeps it. `keyRemoved` says when a new
+ * address took it, which the screen explains.
  */
 export const saveAiProvider = action(
   z.object({
     provider: z.enum(AiProvider),
-    // Saved as typed: a half-typed address is harmless, and the connection test explains a wrong one.
+    // Saved as typed: the connection test explains a wrong address. A half-typed one on another host removes the key too.
     baseUrl: z.string().trim().max(500),
     model: z.string().trim().max(200),
   }),
   async ({ provider, baseUrl, model }) => {
     const current = await loadSettings();
+    const keepsKey = current.provider === provider && sameServer(provider, current.baseUrl, baseUrl);
     await saveSettings({
       provider,
       baseUrl: baseUrl || null,
       model: model || null,
-      ...(current.provider !== provider ? { apiKeyEnc: null } : {}),
+      ...(keepsKey ? {} : { apiKeyEnc: null }),
     });
-    return { keyState: await currentKeyState() };
+    const keyRemoved = current.provider === provider && !keepsKey && current.apiKeyEnc !== null;
+    return { keyState: await currentKeyState(), ...(keyRemoved ? { keyRemoved } : {}) };
   },
 );
 
@@ -93,6 +97,19 @@ export const saveApiKey = action(
       ...(current.provider ? {} : { provider }),
     });
     return { keyState: await currentKeyState() };
+  },
+);
+
+/**
+ * How long one AI request may take, in seconds (public issue 118); null goes
+ * back to DOSSIER_AI_TIMEOUT_SECONDS, or the provider's own. A task started
+ * after the change has it.
+ */
+export const saveAiTimeout = action(
+  z.object({ seconds: z.number().int().min(AI_TIMEOUT_LIMITS.min).max(AI_TIMEOUT_LIMITS.max).nullable() }),
+  async ({ seconds }) => {
+    await saveSettings({ aiTimeoutSeconds: seconds });
+    return { seconds };
   },
 );
 
