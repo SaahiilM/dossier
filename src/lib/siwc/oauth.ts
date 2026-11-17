@@ -48,7 +48,12 @@ export async function validateIdToken(idToken: string, clientId: string, nonce: 
   const config = await openIdConfig();
   if (config.issuer !== ISSUER) throw new Error("ID token issuer mismatch");
   jwks ??= createRemoteJWKSet(new URL(config.jwks_uri));
-  const { payload } = await jwtVerify(idToken, jwks, { issuer: ISSUER, audience: clientId });
+  let payload: Awaited<ReturnType<typeof jwtVerify>>["payload"];
+  try {
+    ({ payload } = await jwtVerify(idToken, jwks, { issuer: ISSUER, audience: clientId }));
+  } catch {
+    throw new Error("ID token validation failed");
+  }
   if (payload.nonce !== nonce) throw new Error("ID token nonce mismatch");
   if (typeof payload.sub !== "string" || !payload.sub) throw new Error("ID token subject missing");
   return payload;

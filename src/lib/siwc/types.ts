@@ -24,7 +24,20 @@ export type AccountSummary = {
   hasDirectUsage: boolean;
 };
 
-export type SignInPhase = "idle" | "pending" | "succeeded" | "failed" | "cancelled";
+export type SignInPhase = "idle" | "pending" | "processing" | "succeeded" | "failed" | "cancelled";
+
+/** Safe diagnostic categories shown to users; never contains provider response text. */
+export type SignInFailureCode =
+  | "authorization_denied"
+  | "provider_unavailable"
+  | "token_exchange"
+  | "token_response"
+  | "token_validation"
+  | "scope_not_granted"
+  | "credential_storage"
+  | "timeout"
+  | "callback_listener"
+  | "unknown";
 
 export type BeginSignInOptions = {
   /** Issued client ID for reauthorization; omit for first-time dynamic registration. */

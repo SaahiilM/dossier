@@ -22,7 +22,7 @@ import {
   loadSubscriptionConnection,
   type SubscriptionConnectionView,
 } from "./subscription-actions";
-import { SUBSCRIPTION_RUNTIME_MESSAGE } from "./subscription-messages";
+import { SIGN_IN_FAILURE_MESSAGES, SUBSCRIPTION_RUNTIME_MESSAGE } from "./subscription-messages";
 import { SettingsSectionIntro } from "./settings-screen";
 
 export type { SubscriptionConnectionView } from "./subscription-actions";
@@ -155,19 +155,25 @@ export function SubscriptionProviderSection({
       if (!result.ok || !connection) return;
       const next: SubscriptionConnectionView = {
         ...connection,
-        chatGpt: { ...connection.chatGpt, phase: result.data.phase, accounts: result.data.accounts },
+        chatGpt: {
+          ...connection.chatGpt,
+          phase: result.data.phase,
+          failure: result.data.failure,
+          accounts: result.data.accounts,
+        },
       };
       publish(next);
-      if (result.data.phase === "pending") return;
+      if (result.data.phase === "pending" || result.data.phase === "processing") return;
       stopPoll();
       setSigningIn(false);
       if (result.data.phase === "succeeded") toast("Connected to ChatGPT.");
-      else if (result.data.phase === "failed" || result.data.phase === "cancelled") toast("ChatGPT sign-in didn't finish.");
+      else if (result.data.phase === "failed" && result.data.failure) toast(SIGN_IN_FAILURE_MESSAGES[result.data.failure]);
+      else if (result.data.phase === "cancelled") toast("ChatGPT sign-in was cancelled.");
     });
   }, [connection, publish]);
 
   useEffect(() => {
-    if (phase !== "pending") return;
+    if (phase !== "pending" && phase !== "processing") return;
     pollRef.current = setInterval(() => void pollSignIn(), 1500);
     return stopPoll;
   }, [phase, pollSignIn]);
@@ -192,12 +198,13 @@ export function SubscriptionProviderSection({
     sendPendingTab(pendingTab, result.data.authorizeUrl);
     publish({
       ...(connection ?? {
-        chatGpt: { runtimeAvailable, phase: result.data.phase, accounts },
+        chatGpt: { runtimeAvailable, phase: result.data.phase, failure: null, accounts },
         claude: { installed: false, auth: "unknown" },
       }),
       chatGpt: {
         runtimeAvailable,
         phase: result.data.phase,
+        failure: null,
         accounts,
       },
     });
@@ -286,6 +293,8 @@ export function SubscriptionProviderSection({
                       </Button>
                       <p className="text-meta text-muted">Finish sign-in in your browser, then wait here.</p>
                     </>
+                  ) : phase === "processing" ? (
+                    <p role="status" className="text-meta text-muted">OpenAI authorized the request. Dossier is validating and saving the connection…</p>
                   ) : (
                     <Button variant="primary" size="sm" disabled={signingIn} onClick={() => void connectChatGpt()}>
                       {accounts.length ? "Connect another account" : "Connect ChatGPT"}
@@ -301,6 +310,12 @@ export function SubscriptionProviderSection({
                 <p className="text-meta text-muted">The authorize page opens in your browser.</p>
               )}
             </div>
+
+            {phase === "failed" && connection?.chatGpt.failure && (
+              <p role="alert" className="rounded-card bg-warning-surface px-4 py-3 text-meta text-warning">
+                {SIGN_IN_FAILURE_MESSAGES[connection.chatGpt.failure]}
+              </p>
+            )}
 
             {accounts.length > 0 && (
               <>

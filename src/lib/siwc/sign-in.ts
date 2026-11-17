@@ -12,7 +12,7 @@ import {
 import { getOrCreateHostId } from "./host";
 import { exchangeAuthorizationCode } from "./oauth";
 import { toAccountSummary, upsertCredential, withCredentialsStore } from "./storage";
-import type { AccountSummary, BeginSignInOptions, SignInPhase, StoredCredential } from "./types";
+import type { AccountSummary, BeginSignInOptions, SignInFailureCode, SignInPhase, StoredCredential } from "./types";
 
 const b64url = (buffer: Buffer) => buffer.toString("base64url");
 
@@ -33,14 +33,19 @@ type PendingSignIn = {
   server: Server;
   timer: ReturnType<typeof setTimeout>;
   result: Promise<AccountSummary>;
+  processing: boolean;
 };
 
 let pending: PendingSignIn | undefined;
 let phase: SignInPhase = "idle";
-let signInObserved = false;
+let failureCode: SignInFailureCode | undefined;
 
 export function getSignInPhase(): SignInPhase {
-  return pending ? "pending" : phase;
+  return pending?.processing ? "processing" : pending ? "pending" : phase;
+}
+
+export function getSignInFailureCode(): SignInFailureCode | undefined {
+  return failureCode;
 }
 
 export function isSignInPending(): boolean {
@@ -49,7 +54,6 @@ export function isSignInPending(): boolean {
 
 export function getSignInResult(): Promise<AccountSummary> | undefined {
   if (!pending?.result) return undefined;
-  signInObserved = true;
   return pending.result;
 }
 
@@ -58,7 +62,7 @@ let activeReject: ((error: Error) => void) | undefined;
 export async function beginSignIn(options: BeginSignInOptions = {}): Promise<string> {
   if (pending) throw new Error("Sign in is already in progress");
   phase = "idle";
-  signInObserved = false;
+  failureCode = undefined;
 
   const state = b64url(randomBytes(32));
   const nonce = b64url(randomBytes(32));
@@ -81,12 +85,18 @@ export async function beginSignIn(options: BeginSignInOptions = {}): Promise<str
     activeReject = (error: Error) => {
       if (settled) return;
       settled = true;
-      phase = error instanceof SignInCancelledError ? "cancelled" : "failed";
-      if (signInObserved) reject(error);
+      if (error instanceof SignInCancelledError) {
+        phase = "cancelled";
+      } else {
+        phase = "failed";
+        failureCode = classifySignInFailure(error);
+      }
+      reject(error);
     };
 
     const server = createServer((req, res) => {
-      if (!pending || req.method !== "GET") {
+      const current = pending;
+      if (!current || req.method !== "GET") {
         res.writeHead(404).end();
         return;
       }
@@ -96,16 +106,20 @@ export async function beginSignIn(options: BeginSignInOptions = {}): Promise<str
         return;
       }
 
-      if (url.searchParams.get("state") !== pending.state) {
+      if (url.searchParams.get("state") !== current.state) {
         res.writeHead(400).end("Invalid sign-in state");
-        finish(new Error("Sign-in state mismatch"));
+        return;
+      }
+
+      if (current.processing) {
+        res.writeHead(409, { "content-type": "text/plain" }).end("Sign-in is already being completed.");
         return;
       }
 
       const oauthError = url.searchParams.get("error");
       if (oauthError) {
-        res.writeHead(200, { "content-type": "text/plain" }).end("Sign-in was not completed.");
-        finish(new Error(oauthError === "access_denied" ? "ChatGPT sign-in was declined" : `Sign-in error: ${oauthError}`));
+        res.writeHead(400, { "content-type": "text/plain" }).end("Sign-in was not completed. Return to Dossier for details.");
+        finish(new Error(oauthError === "access_denied" ? "ChatGPT sign-in was declined" : "Authorization was not completed"));
         return;
       }
 
@@ -113,55 +127,74 @@ export async function beginSignIn(options: BeginSignInOptions = {}): Promise<str
       const callbackClientId = url.searchParams.get("client_id");
       if (!code) {
         res.writeHead(400).end("Missing authorization code");
-        finish(new Error("Missing authorization code"));
         return;
       }
 
-      let exchangeClientId = pending.expectedClientId;
-      if (pending.isNewRegistration) {
+      let exchangeClientId = current.expectedClientId;
+      if (current.isNewRegistration) {
         if (!callbackClientId || callbackClientId === DYNAMIC_CLIENT) {
           res.writeHead(400).end("Missing issued client ID");
-          finish(new Error("Registration did not return an issued client ID"));
           return;
         }
         exchangeClientId = callbackClientId;
-      } else if (callbackClientId && callbackClientId !== pending.expectedClientId) {
+      } else if (callbackClientId && callbackClientId !== current.expectedClientId) {
         res.writeHead(400).end("Unexpected client ID");
-        finish(new Error("Callback client ID does not match the selected account"));
         return;
       }
 
-      res.writeHead(200, { "content-type": "text/plain" }).end("Sign-in complete. You can close this window.");
-
-      void exchangeAuthorizationCode({
-        code,
-        clientId: exchangeClientId,
-        verifier: pending.verifier,
-        redirectUri: pending.redirectUri,
-        nonce: pending.nonce,
-        hostId,
-      })
-        .then(async (credential: StoredCredential) => {
-          const summary = await withCredentialsStore(async (rows) => ({
-            rows: upsertCredential(rows, credential),
-            result: toAccountSummary(credential),
-          }));
+      current.processing = true;
+      phase = "processing";
+      clearTimeout(current.timer);
+      void (async () => {
+        try {
+          const credential: StoredCredential = await exchangeAuthorizationCode({
+            code,
+            clientId: exchangeClientId,
+            verifier: current.verifier,
+            redirectUri: current.redirectUri,
+            nonce: current.nonce,
+            hostId,
+          });
+          let summary: AccountSummary;
+          try {
+            summary = await withCredentialsStore(async (rows) => ({
+              rows: upsertCredential(rows, credential),
+              result: toAccountSummary(credential),
+            }));
+          } catch {
+            throw new Error("Credential storage failed");
+          }
+          res.writeHead(200, { "content-type": "text/plain" }).end("Sign-in complete. You can close this window.");
           phase = "succeeded";
           resolveResult(summary);
-        })
-        .catch((error: unknown) => {
-          finish(error instanceof Error ? error : new Error("Sign-in failed"));
-        });
+          cleanup(current.server);
+        } catch (error) {
+          const normalized = error instanceof Error ? error : new Error("Sign-in failed");
+          const code = classifySignInFailure(normalized);
+          res.writeHead(502, { "content-type": "text/plain" }).end(`Sign-in failed (${code}). Return to Dossier for details.`);
+          finish(normalized);
+        }
+      })().catch((error: unknown) => {
+        // The async callback handler is deliberately contained so no exchange or
+        // storage failure can escape as an unhandled rejection.
+        finish(error instanceof Error ? error : new Error("Sign-in failed"));
+      });
     });
+
+    const cleanup = (server: Server) => {
+      if (pending?.server === server) {
+        clearTimeout(pending.timer);
+        pending = undefined;
+        activeReject = undefined;
+      }
+      if (server.listening) setImmediate(() => server.close());
+    };
 
     const finish = (error: Error) => {
       if (settled) return;
-      clearTimeout(pending?.timer);
-      const emit = activeReject;
-      pending = undefined;
-      activeReject = undefined;
-      emit?.(error);
-      setImmediate(() => server.close());
+      const reject = activeReject;
+      cleanup(server);
+      reject?.(error);
     };
 
     server.listen(0, "127.0.0.1", () => {
@@ -185,15 +218,18 @@ export async function beginSignIn(options: BeginSignInOptions = {}): Promise<str
         server,
         timer,
         result,
+        processing: false,
       };
       phase = "pending";
     });
 
     server.on("error", (error) => {
-      if (!pending) return;
       finish(error instanceof Error ? error : new Error("Sign-in listener error"));
     });
   });
+  // Listener startup can fail before the caller receives the authorization URL.
+  void result.catch(() => undefined);
+
   await new Promise<void>((resolve, reject) => {
     const check = () => {
       if (boundRedirectUri) {
@@ -227,19 +263,53 @@ export async function beginSignIn(options: BeginSignInOptions = {}): Promise<str
   if (options.idTokenHint) params.set("id_token_hint", options.idTokenHint);
   if (options.loginHint) params.set("login_hint", options.loginHint);
 
-  void result.finally(() => {
-    if (phase === "succeeded" || phase === "failed" || phase === "cancelled") {
-      pending = undefined;
-      activeReject = undefined;
-    }
-  });
+  void result.then(
+    () => {
+      if (phase === "succeeded" || phase === "failed" || phase === "cancelled") {
+        pending = undefined;
+        activeReject = undefined;
+      }
+    },
+    () => {
+      if (phase === "succeeded" || phase === "failed" || phase === "cancelled") {
+        pending = undefined;
+        activeReject = undefined;
+      }
+    },
+  );
 
   return `${AUTH_URL}?${params}`;
+}
+
+function classifySignInFailure(error: Error): SignInFailureCode {
+  const message = error.message.toLowerCase();
+  if (message.includes("declined")) return "authorization_denied";
+  if (message.includes("authorization was not completed")) return "authorization_denied";
+  if (message.includes("timed out")) return "timeout";
+  if (message.includes("listener") || message.includes("bind")) return "callback_listener";
+  if (message.includes("missing required scope") || message.includes("direct plan usage")) return "scope_not_granted";
+  if (message.includes("incomplete token response") || message.includes("invalid refresh response")) return "token_response";
+  if (message.includes("token exchange failed")) return "token_exchange";
+  if (message.includes("discovery") || message.includes("network") || message.includes("fetch")) return "provider_unavailable";
+  if (message.includes("id token") || message.includes("issuer") || message.includes("nonce") || message.includes("subject")) {
+    return "token_validation";
+  }
+  if (
+    message.includes("credential storage") ||
+    message.includes("credentials") ||
+    message.includes("permission") ||
+    message.includes("eacces") ||
+    message.includes("erofs")
+  ) {
+    return "credential_storage";
+  }
+  return "unknown";
 }
 
 /** Closes the loopback listener without rejecting an in-flight sign-in (tests and abandoned URL prefetch). */
 export function abandonSignInAttempt(): void {
   if (!pending) return;
+  if (pending.processing) return;
   const { server, timer } = pending;
   clearTimeout(timer);
   server.close();
@@ -250,12 +320,12 @@ export function abandonSignInAttempt(): void {
 
 export function cancelSignIn(): void {
   if (!pending) return;
+  if (pending.processing) return;
   const { server, timer } = pending;
   clearTimeout(timer);
   server.close();
   const emit = activeReject;
   pending = undefined;
   activeReject = undefined;
-  if (signInObserved) emit?.(new SignInCancelledError());
-  else phase = "cancelled";
+  emit?.(new SignInCancelledError());
 }

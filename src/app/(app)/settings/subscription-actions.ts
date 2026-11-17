@@ -11,11 +11,12 @@ import {
   beginSignIn,
   cancelSignIn,
   disconnect,
+  signInFailureCode,
   signInResult,
   signInStatus,
   status,
 } from "@/lib/siwc";
-import type { AccountSummary, SignInPhase } from "@/lib/siwc/types";
+import type { AccountSummary, SignInFailureCode, SignInPhase } from "@/lib/siwc/types";
 
 import { isSubscriptionAuthRuntime, SUBSCRIPTION_RUNTIME_MESSAGE } from "./subscription-runtime";
 
@@ -37,6 +38,7 @@ async function safelyConsumeSignInResult(): Promise<void> {
 export type ChatGptSubscriptionView = {
   runtimeAvailable: boolean;
   phase: SignInPhase;
+  failure: SignInFailureCode | null;
   accounts: AccountSummary[];
 };
 
@@ -56,7 +58,7 @@ async function chatGptView(): Promise<ChatGptSubscriptionView> {
   const rawPhase = signInStatus();
   const accounts = await status();
   const phase: SignInPhase = runtimeAvailable ? rawPhase : "idle";
-  return { runtimeAvailable, phase, accounts };
+  return { runtimeAvailable, phase, failure: signInFailureCode() ?? null, accounts };
 }
 
 async function claudeView(): Promise<ClaudeSubscriptionView> {
@@ -100,8 +102,8 @@ export const getChatGptSubscriptionSignInStatus = action(z.object({}), async () 
   let phase = signInStatus();
   if (phase === "succeeded") await safelyConsumeSignInResult();
   phase = signInStatus();
-  const accounts = phase === "succeeded" || phase === "idle" ? await status() : [];
-  return { phase, accounts };
+  const accounts = await status();
+  return { phase, failure: signInFailureCode() ?? null, accounts };
 });
 
 export const cancelChatGptSubscriptionSignIn = action(z.object({}), async () => {

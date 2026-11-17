@@ -51,11 +51,12 @@ const tokenJson = (overrides: Record<string, unknown> = {}) =>
     ...overrides,
   });
 
-function hitCallback(url: string): Promise<number> {
+function hitCallback(url: string): Promise<{ status: number; body: string }> {
   return new Promise((resolve, reject) => {
     httpRequest(url, (res) => {
-      res.resume();
-      resolve(res.statusCode ?? 0);
+      const chunks: Buffer[] = [];
+      res.on("data", (chunk: Buffer) => chunks.push(chunk));
+      res.on("end", () => resolve({ status: res.statusCode ?? 0, body: Buffer.concat(chunks).toString("utf8") }));
     })
       .on("error", reject)
       .end();
@@ -75,7 +76,7 @@ function stubOAuthFetch(nonce: string) {
       }
       if (url.includes("openid-configuration")) {
         return new Response(
-          JSON.stringify({ issuer: "https://auth.openai.com/", jwks_uri: "https://example/jwks" }),
+          JSON.stringify({ issuer: "https://auth.openai.com", jwks_uri: "https://example/jwks" }),
           { status: 200 },
         );
       }
@@ -213,7 +214,7 @@ describe("token refresh serialization", () => {
           );
         }
         if (url.includes("openid-configuration")) {
-          return new Response(JSON.stringify({ issuer: "https://auth.openai.com/", jwks_uri: "https://example/jwks" }), {
+          return new Response(JSON.stringify({ issuer: "https://auth.openai.com", jwks_uri: "https://example/jwks" }), {
             status: 200,
           });
         }
@@ -267,7 +268,9 @@ describe("sign-in flow", () => {
     expect(outcome).toBeDefined();
     stubOAuthFetch(nonce);
 
-    expect(await hitCallback(`${redirectUri}?code=auth-code&state=${state}&client_id=oaiapp_cb`)).toBe(200);
+    const callback = await hitCallback(`${redirectUri}?code=auth-code&state=${state}&client_id=oaiapp_cb`);
+    expect(callback.status).toBe(200);
+    expect(callback.body).toContain("Sign-in complete");
 
     const summary = await outcome!;
     expect(summary).toMatchObject({ sub: "user-sub", clientId: "oaiapp_cb", hasDirectUsage: true });
@@ -277,12 +280,55 @@ describe("sign-in flow", () => {
     expect(stored[0]?.accessToken).toBe("new-access");
   });
 
-  it("returns HTTP 400 for a mismatched OAuth state parameter", async () => {
+  it("rejects a mismatched OAuth state without cancelling the pending sign-in", async () => {
     const url = await beginSignIn();
     const parsed = new URL(url);
     const redirectUri = parsed.searchParams.get("redirect_uri")!;
-    expect(await hitCallback(`${redirectUri}?code=auth-code&state=wrong`)).toBe(400);
+    expect((await hitCallback(`${redirectUri}?code=auth-code&state=wrong`)).status).toBe(400);
+    expect(signInStatus()).toBe("pending");
+    abandonSignInAttempt();
+  });
+
+  it("does not report callback success when token validation fails", async () => {
+    const url = await beginSignIn();
+    const parsed = new URL(url);
+    const redirectUri = parsed.searchParams.get("redirect_uri")!;
+    const state = parsed.searchParams.get("state")!;
+    const outcome = signInResult();
+    stubOAuthFetch(parsed.searchParams.get("nonce")!);
+    jwtVerify.mockRejectedValueOnce(new Error("unexpected audience claim"));
+
+    const callback = await hitCallback(`${redirectUri}?code=auth-code&state=${state}&client_id=oaiapp_cb`);
+    expect(callback.status).toBe(502);
+    expect(callback.body).toContain("token_validation");
+    expect(callback.body).not.toContain("audience claim");
+    await expect(outcome).rejects.toThrow();
     expect(signInStatus()).toBe("failed");
+    expect(await loadCredentials()).toHaveLength(0);
+  });
+
+  it("accepts only one concurrent callback and finishes after storing credentials", async () => {
+    const url = await beginSignIn();
+    const parsed = new URL(url);
+    const redirectUri = parsed.searchParams.get("redirect_uri")!;
+    const state = parsed.searchParams.get("state")!;
+    const outcome = signInResult();
+    stubOAuthFetch(parsed.searchParams.get("nonce")!);
+    jwtVerify.mockImplementationOnce(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 25));
+      return { payload: { sub: "user-sub", nonce: parsed.searchParams.get("nonce"), email: "u@example.com" } };
+    });
+
+    const first = hitCallback(`${redirectUri}?code=auth-code&state=${state}&client_id=oaiapp_cb`);
+    for (let attempt = 0; attempt < 100 && signInStatus() !== "processing"; attempt++) {
+      await new Promise((resolve) => setTimeout(resolve, 1));
+    }
+    expect(signInStatus()).toBe("processing");
+    const duplicate = await hitCallback(`${redirectUri}?code=auth-code&state=${state}&client_id=oaiapp_cb`);
+    expect(duplicate.status).toBe(409);
+    expect((await first).status).toBe(200);
+    await expect(outcome).resolves.toMatchObject({ sub: "user-sub" });
+    expect(await loadCredentials()).toHaveLength(1);
   });
 
   it("cancel does not emit an unhandled rejection when nobody awaits the result", async () => {
