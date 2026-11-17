@@ -48,6 +48,14 @@ describe("proxy matcher", () => {
 });
 
 describe("proxy", () => {
+  it("lets mobile v1 handlers authenticate requests without a web cookie", async () => {
+    for (const path of ["/api/mobile/v1/auth/login", "/api/mobile/v1/applications"]) {
+      const response = await proxy(request(path));
+      expect(response.headers.get("x-middleware-next")).toBe("1");
+    }
+    expect((await proxy(request("/api/mobile/v10/applications"))).status).toBe(401);
+  });
+
   it("lets signed-in requests through", async () => {
     const token = await encodeSession({ persistent: false }, { key, fingerprint });
     const response = await proxy(request("/profile", { cookie: token }));

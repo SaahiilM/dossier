@@ -27,6 +27,9 @@ export async function proxy(request: NextRequest) {
     return NextResponse.next();
   }
 
+  // Mobile v1 routes enforce their own bearer-token authentication.
+  if (pathname.startsWith("/api/mobile/v1/")) return NextResponse.next();
+
   const session = await decodeSession(
     request.cookies.get(SESSION_COOKIE)?.value,
     sessionTokenOptions(),
