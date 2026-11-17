@@ -1,0 +1,9 @@
+[Unit]
+Description=Build and deploy Dossier from the personal fork's main branch
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/libexec/dossier-auto-deploy
+TimeoutStartSec=45min

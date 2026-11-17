@@ -32,6 +32,16 @@ describe("About (E10-9)", () => {
     expect(checkUpdates).not.toHaveBeenCalled();
   });
 
+  it("shows the package version and unique build identity in the install facts", () => {
+    render(<AboutSection facts={[
+      { label: "Version", value: "1.13.0" },
+      { label: "Build", value: "1.13.0+d4405d1f9161" },
+      { label: "Built", value: "2026-11-17T12:00:00Z" },
+    ]} usagePing={ping} updates={updates} />);
+    expect(screen.getByText("1.13.0+d4405d1f9161")).toBeInTheDocument();
+    expect(screen.getByText("2026-11-17T12:00:00Z")).toBeInTheDocument();
+  });
+
   it("says what the usage ping sends, with the install ID, and switches it off (#172)", async () => {
     const user = userEvent.setup();
     render(<AboutSection facts={facts} usagePing={ping} updates={updates} />);

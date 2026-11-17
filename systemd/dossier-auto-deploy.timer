@@ -1,0 +1,12 @@
+[Unit]
+Description=Check Dossier main for merged changes
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=2min
+AccuracySec=15s
+Persistent=true
+Unit=dossier-auto-deploy.service
+
+[Install]
+WantedBy=timers.target
