@@ -50,6 +50,23 @@ struct MobileAPIClient {
         return envelope.profile
     }
 
+    /// Returns nil when the server predates the optional mobile setup endpoint.
+    func setupStatus(token: String) async throws -> MobileSetupStatus? {
+        do {
+            return try await request(path: "setup", method: "GET", token: token)
+        } catch let error as MobileAPIError where error.statusCode == 404 {
+            return nil
+        }
+    }
+
+    var setupGuideURL: URL? {
+        guard var components = URLComponents(url: serverURL, resolvingAgainstBaseURL: false) else { return nil }
+        components.path = "/welcome"
+        components.query = nil
+        components.fragment = nil
+        return components.url
+    }
+
     func createCapture(_ payload: CaptureCreatePayload, token: String) async throws -> CaptureRecord {
         let envelope: CaptureEnvelope = try await request(path: "captures", method: "POST", body: payload, token: token)
         return envelope.capture

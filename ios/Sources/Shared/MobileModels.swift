@@ -66,6 +66,12 @@ struct ProfileEnvelope: Decodable {
     let profile: JSONValue
 }
 
+struct MobileSetupStatus: Decodable, Equatable {
+    let profileReady: Bool
+    let aiConfigured: Bool
+    let setupInProgress: Bool
+}
+
 struct CaptureEnvelope: Decodable {
     let capture: CaptureRecord
 }
