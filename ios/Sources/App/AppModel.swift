@@ -2,10 +2,25 @@ import Foundation
 import SwiftUI
 import UIKit
 
+enum WorkspaceTab: Hashable {
+    case applications
+    case inbox
+    case settings
+}
+
+enum SetupStatusLoadState: Equatable {
+    case notChecked
+    case loading
+    case available
+    case unsupported
+    case unavailable
+}
+
 @MainActor
 final class AppModel: ObservableObject {
     static let defaultServerAddress = MobileAPIClient.defaultServerAddress
     private static let serverAddressKey = "dossier.mobile.server-address"
+    private static let welcomeSeenPrefix = "dossier.mobile.welcome-seen.v1."
 
     @Published private(set) var session: StoredSession?
     @Published private(set) var applications: [ApplicationRecord] = []
@@ -24,6 +39,10 @@ final class AppModel: ObservableObject {
     @Published private(set) var applicationsSavedAt: Date?
     @Published private(set) var profileSavedAt: Date?
     @Published private(set) var capturesSavedAt: Date?
+    @Published private(set) var setupStatus: MobileSetupStatus?
+    @Published private(set) var setupStatusLoadState: SetupStatusLoadState = .notChecked
+    @Published private(set) var isWelcomePresented = false
+    @Published var selectedWorkspaceTab: WorkspaceTab = .applications
     @Published var errorMessage: String?
     @Published var serverAddress: String
 
@@ -47,6 +66,10 @@ final class AppModel: ObservableObject {
 
     var isSignedIn: Bool { session != nil }
 
+    var setupGuideURL: URL? {
+        try? MobileAPIClient(serverAddress: serverAddress).setupGuideURL
+    }
+
     func signIn(password: String) async {
         errorMessage = nil
         isSigningIn = true
@@ -63,8 +86,55 @@ final class AppModel: ObservableObject {
             }
             session = newSession
             restoreCache(for: newSession)
+            presentWelcomeIfNeeded()
         } catch {
             errorMessage = error.localizedDescription
+        }
+    }
+
+    func presentWelcomeIfNeeded() {
+        guard isSignedIn, !isWelcomePresented, !defaults.bool(forKey: welcomeSeenKey) else { return }
+        isWelcomePresented = true
+    }
+
+    func reopenWelcome() {
+        guard isSignedIn else { return }
+        isWelcomePresented = true
+        Task { await refreshSetupStatus() }
+    }
+
+    func dismissWelcome() {
+        guard isWelcomePresented else { return }
+        defaults.set(true, forKey: welcomeSeenKey)
+        isWelcomePresented = false
+    }
+
+    func navigateFromWelcome(to tab: WorkspaceTab) {
+        selectedWorkspaceTab = tab
+        dismissWelcome()
+    }
+
+    func refreshSetupStatus() async {
+        guard let session else { return }
+        setupStatus = nil
+        setupStatusLoadState = .loading
+        do {
+            let result = try await MobileAPIClient(serverAddress: serverAddress).setupStatus(token: session.accessToken)
+            guard self.session?.accessToken == session.accessToken else { return }
+            if let result {
+                setupStatus = result
+                setupStatusLoadState = .available
+            } else {
+                setupStatus = nil
+                setupStatusLoadState = .unsupported
+            }
+        } catch {
+            guard self.session?.accessToken == session.accessToken else { return }
+            setupStatus = nil
+            setupStatusLoadState = .unavailable
+            if let apiError = error as? MobileAPIError, apiError.statusCode == 401 {
+                await handle(error)
+            }
         }
     }
 
@@ -82,6 +152,8 @@ final class AppModel: ObservableObject {
         self.session = nil
         applications = []
         profile = nil
+        setupStatus = nil
+        setupStatusLoadState = .notChecked
         applicationsSavedAt = nil
         profileSavedAt = nil
         serverCaptures = []
@@ -102,6 +174,8 @@ final class AppModel: ObservableObject {
             self.session = nil
             applications = []
             profile = nil
+            setupStatus = nil
+            setupStatusLoadState = .notChecked
             applicationsSavedAt = nil
             profileSavedAt = nil
             serverCaptures = []
@@ -259,6 +333,25 @@ final class AppModel: ObservableObject {
         }
     }
 
+    private var welcomeSeenKey: String {
+        let normalized = Self.normalizedServerAddress(serverAddress)
+        return Self.welcomeSeenPrefix + normalized
+    }
+
+    private static func normalizedServerAddress(_ value: String) -> String {
+        guard var components = URLComponents(string: value.trimmingCharacters(in: .whitespacesAndNewlines)),
+              let scheme = components.scheme?.lowercased(),
+              let host = components.host?.lowercased() else {
+            return value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        }
+        components.scheme = scheme
+        components.host = host
+        components.query = nil
+        components.fragment = nil
+        components.path = components.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        return components.string ?? value.lowercased()
+    }
+
     private func upsertServerCapture(_ capture: CaptureRecord) {
         serverCaptures.removeAll { $0.id == capture.id }
         serverCaptures.insert(capture, at: 0)
@@ -285,6 +378,8 @@ final class AppModel: ObservableObject {
         self.session = nil
         applications = []
         profile = nil
+        setupStatus = nil
+        setupStatusLoadState = .notChecked
         serverCaptures = []
         applicationsSavedAt = nil
         profileSavedAt = nil
