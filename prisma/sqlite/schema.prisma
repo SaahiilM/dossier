@@ -1026,6 +1026,23 @@ model LoginThrottle {
   @@index([updatedAt])
 }
 
+/// Opaque native-client sessions. The raw bearer token is only returned once;
+/// this table stores its SHA-256 digest and device metadata instead.
+model MobileDeviceSession {
+  id                  String    @id @default(cuid())
+  tokenHash           String    @unique
+  deviceName          String
+  /// Invalidates all sessions minted under an older DOSSIER_PASSWORD hash.
+  passwordFingerprint String
+  createdAt           DateTime  @default(now())
+  expiresAt           DateTime
+  lastUsedAt          DateTime?
+  revokedAt           DateTime?
+
+  @@index([expiresAt])
+  @@index([revokedAt])
+}
+
 // ─── Background jobs (E6-7) ──────────────────────────────────────────────────
 
 /// A job goes queued → running → done, or failed.
