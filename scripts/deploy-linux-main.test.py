@@ -3,6 +3,7 @@ import os
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
 spec = importlib.util.spec_from_file_location(
     "dossier_deploy", Path(__file__).with_name("deploy-linux-main.py")
@@ -46,6 +47,18 @@ class DeploymentDecisionTests(unittest.TestCase):
                 self.assertIsNone(deploy.acquire_lock(lock_path))
             finally:
                 first.close()
+
+    @patch.object(deploy.subprocess, "run")
+    def test_public_health_uses_curl_and_parses_response(self, mock_run):
+        payload = '{"status":"ok","build":"b"}'
+        mock_run.return_value = type("Result", (), {"returncode": 0, "stdout": payload})()
+        self.assertEqual(deploy.read_json_health("https://example.test/api/health"), {"status": "ok", "build": "b"})
+        self.assertEqual(mock_run.call_args.args[0][:2], ["curl", "--fail"])
+
+    @patch.object(deploy.subprocess, "run")
+    def test_public_health_http_failure_is_a_safe_miss(self, mock_run):
+        mock_run.return_value = type("Result", (), {"returncode": 22, "stdout": ""})()
+        self.assertIsNone(deploy.read_json_health("https://example.test/api/health"))
 
 
 if __name__ == "__main__":

@@ -11,7 +11,6 @@ import shutil
 import subprocess
 import tempfile
 import time
-import urllib.request
 
 APP = "dossier-app"
 VOLUME = "dossier-data"
@@ -73,10 +72,15 @@ def wait_health(name: str, seconds: int) -> bool:
 
 
 def read_json_health(url: str, timeout: int = 15) -> dict | None:
+    result = subprocess.run(
+        ["curl", "--fail", "--silent", "--show-error", "--max-time", str(timeout), url],
+        stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True,
+    )
+    if result.returncode != 0:
+        return None
     try:
-        with urllib.request.urlopen(url, timeout=timeout) as response:
-            return json.loads(response.read())
-    except Exception:
+        return json.loads(result.stdout)
+    except (json.JSONDecodeError, TypeError):
         return None
 
 
