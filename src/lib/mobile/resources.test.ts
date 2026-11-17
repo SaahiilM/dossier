@@ -4,13 +4,21 @@ const state = vi.hoisted(() => ({
   rows: [] as unknown[],
   findFirst: vi.fn(),
   loadProfile: vi.fn(),
+  loadProfileName: vi.fn(),
+  loadSettings: vi.fn(),
+  isAiConfigured: vi.fn(),
 }));
 
+vi.mock("@/lib/ai/config", () => ({ isAiConfigured: (...args: unknown[]) => state.isAiConfigured(...args) }));
 vi.mock("@/lib/applications-data", () => ({ loadApplicationRows: vi.fn(async () => state.rows) }));
-vi.mock("@/lib/profile-data", () => ({ loadProfile: state.loadProfile }));
+vi.mock("@/lib/profile-data", () => ({
+  loadProfile: state.loadProfile,
+  loadProfileName: (...args: unknown[]) => state.loadProfileName(...args),
+}));
 vi.mock("@/lib/prisma", () => ({ prisma: { application: { findFirst: state.findFirst } } }));
+vi.mock("@/lib/settings-data", () => ({ loadSettings: (...args: unknown[]) => state.loadSettings(...args) }));
 
-import { listMobileApplications, getMobileApplication, MOBILE_LIST_PAGE_SIZE } from "./resources";
+import { getMobileApplication, getMobileSetup, listMobileApplications, MOBILE_LIST_PAGE_SIZE } from "./resources";
 
 const item = (index: number, updatedAt = new Date("2026-11-17T00:00:00.000Z").getTime()) => ({
   id: `application-${String(index).padStart(3, "0")}`,
@@ -34,6 +42,9 @@ describe("mobile resource DTOs", () => {
     state.rows = [];
     state.findFirst.mockReset();
     state.loadProfile.mockReset();
+    state.loadProfileName.mockReset().mockResolvedValue("");
+    state.loadSettings.mockReset().mockResolvedValue({ setupGuide: null, provider: null, apiKeyEnc: null });
+    state.isAiConfigured.mockReset().mockResolvedValue(false);
   });
 
   it("paginates newest-first with an opaque keyset cursor and no duplicate rows", async () => {
@@ -92,5 +103,26 @@ describe("mobile resource DTOs", () => {
       extracted: { title: "Designer", company: "Northwind", requirements: [] },
       match: null,
     });
+  });
+
+  it("treats an older incomplete account as not ready or in progress", async () => {
+    await expect(getMobileSetup()).resolves.toEqual({ profileReady: false, aiConfigured: false, setupInProgress: false });
+  });
+
+  it("uses the shared setup predicates and omits saved setup and provider settings", async () => {
+    state.loadProfileName.mockResolvedValue("  Jane Doe  ");
+    state.loadSettings.mockResolvedValue({
+      setupGuide: { step: "profile", finished: false },
+      provider: "OPENAI",
+      apiKeyEnc: "encrypted-provider-credential",
+    });
+    // This shared predicate means a provider was selected, not that it was tested or reachable.
+    state.isAiConfigured.mockResolvedValue(true);
+
+    const result = await getMobileSetup();
+
+    expect(result).toEqual({ profileReady: true, aiConfigured: true, setupInProgress: true });
+    expect(Object.keys(result).sort()).toEqual(["aiConfigured", "profileReady", "setupInProgress"]);
+    expect(JSON.stringify(result)).not.toMatch(/OPENAI|encrypted-provider-credential|"step"|"finished"/);
   });
 });

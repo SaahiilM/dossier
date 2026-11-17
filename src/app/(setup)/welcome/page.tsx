@@ -18,7 +18,7 @@ import { loadSettings } from "@/lib/settings-data";
 import { googleClientView, googleView, requestOrigin } from "@/lib/settings-views";
 import { aiChoice, choiceOf } from "@/lib/setup/ai-choices";
 import { googleAddressProblem } from "@/lib/setup/google";
-import { setupHref, setupStepFromParam } from "@/lib/setup-guide";
+import { isProfileReady, setupHref, setupStepFromParam } from "@/lib/setup-guide";
 
 import { ProfileImport } from "../../(app)/profile/import/profile-import";
 import { AiStep } from "./ai-step";
@@ -96,7 +96,7 @@ export default async function WelcomePage({ searchParams }: PageProps<"/welcome"
           ))}
         </dl>
         <div className="flex flex-wrap items-center gap-3">
-          {name.trim() ? (
+          {isProfileReady(name) ? (
             <Link href="/new?fresh=1" className={buttonClassName("primary", "md", "hover:text-on-primary")}>
               Start your first application
             </Link>
@@ -199,9 +199,9 @@ export default async function WelcomePage({ searchParams }: PageProps<"/welcome"
     <SetupFrame
       step="profile"
       title="Your profile"
-      complete={Boolean(name.trim())}
+      complete={isProfileReady(name)}
       lead={
-        name.trim()
+        isProfileReady(name)
           ? "Your profile already has your name. Importing a resume adds to it or replaces it: you choose once you've seen what was found."
           : "Everything Dossier writes is built from your profile: your roles, skills and education. Start it from a resume you already have, or skip this step and fill it in yourself."
       }

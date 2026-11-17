@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { nextSetupStep, opensSetupGuide, previousSetupStep, setupInProgress, setupStepFromParam } from "./setup-guide";
+import { isProfileReady, nextSetupStep, opensSetupGuide, previousSetupStep, setupInProgress, setupStepFromParam } from "./setup-guide";
 
 describe("the setup guide (E21)", () => {
   it("opens by itself only on a fresh install that hasn't seen it", () => {
+    expect(isProfileReady("")).toBe(false);
+    expect(isProfileReady("  ")).toBe(false);
+    expect(isProfileReady(" Jane Doe ")).toBe(true);
     expect(opensSetupGuide({ guide: null, name: "", applications: 0 })).toBe(true);
     expect(opensSetupGuide({ guide: null, name: " ", applications: 0 })).toBe(true);
     expect(opensSetupGuide({ guide: null, name: "Jane Doe", applications: 0 })).toBe(false);

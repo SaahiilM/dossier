@@ -21,6 +21,11 @@ export type SetupGuideState = z.infer<typeof setupGuideSchema>;
 
 export const setupHref = (step: SetupStep) => `/welcome?step=${step}`;
 
+/** The web setup guide considers a profile ready once it has a nonblank name. */
+export function isProfileReady(name: string): boolean {
+  return Boolean(name.trim());
+}
+
 /** The step in `?step=`, or where the guide was left, or the start. */
 export function setupStepFromParam(value: string | string[] | undefined, saved: SetupGuideState | null): SetupStep {
   const asked = SETUP_STEPS.find((step) => step === value);
@@ -42,7 +47,7 @@ export function previousSetupStep(step: SetupStep): SetupStep {
  * opened from Settings → About or the dashboard.
  */
 export function opensSetupGuide({ guide, name, applications }: { guide: SetupGuideState | null; name: string; applications: number }): boolean {
-  return guide === null && !name.trim() && applications === 0;
+  return guide === null && !isProfileReady(name) && applications === 0;
 }
 
 /** Opened and neither finished nor left: other questions, such as the usage ping, wait. */

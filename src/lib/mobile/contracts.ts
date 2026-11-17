@@ -47,3 +47,10 @@ export type MobileApplication = {
 };
 
 export type MobileProfile = ProfileData;
+
+/** Boolean setup status only; provider details and persisted setup data stay private. */
+export type MobileSetup = {
+  profileReady: boolean;
+  aiConfigured: boolean;
+  setupInProgress: boolean;
+};

@@ -3,12 +3,15 @@ import "server-only";
 import { z } from "zod";
 
 import { extractedOf, extractedSchema, matchSchema } from "@/lib/application-data";
+import { isAiConfigured } from "@/lib/ai/config";
 import { loadApplicationRows } from "@/lib/applications-data";
 import { DEFAULT_SORT } from "@/lib/applications-list";
 import { prisma } from "@/lib/prisma";
-import { loadProfile } from "@/lib/profile-data";
+import { loadProfile, loadProfileName } from "@/lib/profile-data";
 import { invalidRequest, MobileApiError } from "@/lib/mobile/errors";
-import type { MobileApplication, MobileApplicationSummary, MobileProfile } from "@/lib/mobile/contracts";
+import type { MobileApplication, MobileApplicationSummary, MobileProfile, MobileSetup } from "@/lib/mobile/contracts";
+import { isProfileReady, setupInProgress } from "@/lib/setup-guide";
+import { loadSettings } from "@/lib/settings-data";
 
 const PAGE_SIZE = 50;
 const cursorSchema = z.object({ version: z.literal(1), updatedAt: z.number().int().nonnegative(), id: z.string().min(1).max(128) }).strict();
@@ -122,6 +125,16 @@ export async function getMobileApplication(id: string): Promise<MobileApplicatio
 
 export async function getMobileProfile(): Promise<MobileProfile> {
   return loadProfile();
+}
+
+/** Shares the web setup predicates and exposes only the three native welcome booleans. */
+export async function getMobileSetup(): Promise<MobileSetup> {
+  const [name, settings, aiConfigured] = await Promise.all([loadProfileName(), loadSettings(), isAiConfigured()]);
+  return {
+    profileReady: isProfileReady(name),
+    aiConfigured,
+    setupInProgress: setupInProgress(settings.setupGuide),
+  };
 }
 
 export const MOBILE_LIST_PAGE_SIZE = PAGE_SIZE;
