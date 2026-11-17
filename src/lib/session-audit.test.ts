@@ -105,6 +105,7 @@ describe("session checks (E11-5)", () => {
   it("requires mobile bearer authentication before handling protected requests", () => {
     const handlers = globSync("src/app/api/mobile/v1/**/route.ts");
     expect(handlers).toContain(MOBILE_LOGIN_ROUTE);
+    expect(handlers).toContain("src/app/api/mobile/v1/setup/route.ts");
     for (const file of handlers) {
       const source = read(file);
       if (file === MOBILE_LOGIN_ROUTE) {

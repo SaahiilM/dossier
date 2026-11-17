@@ -47,6 +47,16 @@ Requires a valid bearer token. The request has no body. Success is HTTP `200`:
 
 Logout sets the session's `revokedAt`. Repeating a request with that token returns `401 unauthorized`.
 
+### `GET /api/mobile/v1/setup`
+
+Requires a valid bearer token. Success is HTTP `200`:
+
+```json
+{ "profileReady": false, "aiConfigured": false, "setupInProgress": false }
+```
+
+`profileReady` follows the web welcome guide: it is true when the profile has a nonblank name. `aiConfigured` follows the shared AI provider predicate: a provider is selected in Settings or `DOSSIER_AI_PROVIDER` is set. It means configured, not tested or reachable. `setupInProgress` is true when a saved setup guide exists and is unfinished. Older accounts without a saved guide report `false`; a missing or blank profile name reports `false`. The response contains only these booleans and never returns profile, setup-guide, provider, or credential data.
+
 ## Applications
 
 ### `GET /api/mobile/v1/applications`
