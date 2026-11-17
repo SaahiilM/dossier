@@ -198,6 +198,12 @@ async function aboutFacts(): Promise<AboutFacts> {
   ]);
   return [
     { label: "Version", value: appVersion },
+    ...(process.env.DOSSIER_BUILD_SHA && process.env.DOSSIER_BUILD_SHA !== "unknown"
+      ? [{ label: "Build", value: `${appVersion}+${process.env.DOSSIER_BUILD_SHA.slice(0, 12)}` }]
+      : []),
+    ...(process.env.DOSSIER_BUILD_TIME && process.env.DOSSIER_BUILD_TIME !== "unknown"
+      ? [{ label: "Built", value: process.env.DOSSIER_BUILD_TIME }]
+      : []),
     { label: "Server", value: host },
     { label: "Database", value: `${sqlite ? "SQLite" : "PostgreSQL"} · ${formatBytes(Number(database.size))}` },
     { label: "Sign-in", value: isDesktopApp() ? "none, on this computer" : "set via DOSSIER_PASSWORD" },

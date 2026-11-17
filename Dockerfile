@@ -38,6 +38,10 @@ RUN yarn install --immutable
 
 FROM deps AS build
 ENV NEXT_TELEMETRY_DISABLED=1
+ARG DOSSIER_BUILD_SHA=unknown
+ARG DOSSIER_BUILD_TIME=unknown
+ENV DOSSIER_BUILD_SHA=$DOSSIER_BUILD_SHA \
+    DOSSIER_BUILD_TIME=$DOSSIER_BUILD_TIME
 COPY . .
 RUN yarn generate && yarn build
 # Prisma's CLI for `migrate deploy`, at the version in yarn.lock, with the
@@ -64,7 +68,16 @@ RUN node_modules/.bin/esbuild scripts/hash-password.ts --bundle --platform=node 
   && chmod 755 /tools/hash-password.mjs
 
 FROM base AS production
+ARG DOSSIER_BUILD_SHA=unknown
+ARG DOSSIER_BUILD_TIME=unknown
+ARG DOSSIER_VERSION=unknown
+LABEL org.opencontainers.image.source="https://github.com/SaahiilM/dossier" \
+      org.opencontainers.image.revision=$DOSSIER_BUILD_SHA \
+      org.opencontainers.image.version=$DOSSIER_VERSION \
+      org.opencontainers.image.created=$DOSSIER_BUILD_TIME
 ENV NODE_ENV=production \
+    DOSSIER_BUILD_SHA=$DOSSIER_BUILD_SHA \
+    DOSSIER_BUILD_TIME=$DOSSIER_BUILD_TIME \
     NEXT_TELEMETRY_DISABLED=1 \
     CHECKPOINT_DISABLE=1 \
     PORT=3000 \

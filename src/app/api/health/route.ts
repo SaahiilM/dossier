@@ -17,7 +17,13 @@ export async function GET() {
     new Promise<"unreachable">((resolve) => setTimeout(() => resolve("unreachable"), DB_TIMEOUT_MS).unref()),
   ]).catch(() => "unreachable" as const);
   return NextResponse.json(
-    { status: db === "ok" ? "ok" : "unavailable", version: appVersion, db },
+    {
+      status: db === "ok" ? "ok" : "unavailable",
+      version: appVersion,
+      ...(process.env.DOSSIER_BUILD_SHA && process.env.DOSSIER_BUILD_SHA !== "unknown" ? { build: process.env.DOSSIER_BUILD_SHA } : {}),
+      ...(process.env.DOSSIER_BUILD_TIME && process.env.DOSSIER_BUILD_TIME !== "unknown" ? { builtAt: process.env.DOSSIER_BUILD_TIME } : {}),
+      db,
+    },
     { status: db === "ok" ? 200 : 503, headers: { "cache-control": "no-store" } },
   );
 }
