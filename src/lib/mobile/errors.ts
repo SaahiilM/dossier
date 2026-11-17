@@ -3,6 +3,7 @@ export type MobileErrorCode =
   | "invalid_credentials"
   | "unauthorized"
   | "not_found"
+  | "conflict"
   | "payload_too_large"
   | "unsupported_media_type"
   | "rate_limited"

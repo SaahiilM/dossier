@@ -32,6 +32,9 @@ const OPEN_ROUTES = new Set([
   "src/app/api/desktop/browser-sign-in/route.ts",
 ]);
 
+const MOBILE_LOGIN_ROUTE = "src/app/api/mobile/v1/auth/login/route.ts";
+const MOBILE_ROUTE_PREFIX = "src/app/api/mobile/v1/";
+
 const sources = globSync("src/**/*.{ts,tsx}").filter((file) => !/\.test\.tsx?$/.test(file) && !file.startsWith("src/generated/"));
 const read = (file: string) => readFileSync(file, "utf8");
 const isActionFile = (source: string) => /^\s*["']use server["'];?/.test(source);
@@ -90,12 +93,30 @@ describe("session checks (E11-5)", () => {
 
   it("defines every route handler with route()", () => {
     const unchecked = globSync("src/app/**/route.ts")
-      .filter((file) => !OPEN_ROUTES.has(file))
+      .filter((file) => !OPEN_ROUTES.has(file) && !file.startsWith(MOBILE_ROUTE_PREFIX))
       .flatMap((file) =>
         exportsOf(read(file))
           .filter(([, name, wrapper]) => /^(GET|HEAD|POST|PUT|PATCH|DELETE|OPTIONS)$/.test(name) && wrapper !== "route")
           .map(([line]) => `${file}: ${line}`),
       );
     expect(unchecked).toEqual([]);
+  });
+
+  it("requires mobile bearer authentication before handling protected requests", () => {
+    const handlers = globSync("src/app/api/mobile/v1/**/route.ts");
+    expect(handlers).toContain(MOBILE_LOGIN_ROUTE);
+    for (const file of handlers) {
+      const source = read(file);
+      if (file === MOBILE_LOGIN_ROUTE) {
+        expect(source).toContain("await passwordMatches(");
+        expect(source).toContain("await startLoginAttempt(");
+        continue;
+      }
+      const methods = source.split(/(?=^export async function (?:GET|POST|PATCH|PUT|DELETE)\()/m).slice(1);
+      expect(methods.length, file).toBeGreaterThan(0);
+      for (const method of methods) {
+        expect(method, file).toMatch(/await authenticateMobileRequest\(request\)/);
+      }
+    }
   });
 });
