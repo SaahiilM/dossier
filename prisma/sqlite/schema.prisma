@@ -726,6 +726,46 @@ model ClaudePaste {
   @@index([expiresAt])
 }
 
+// ─── Capture Inbox (Option C first slice) ────────────────────────────────────
+
+/// How a capture entered Dossier. This is independent of application progress.
+enum CaptureSource {
+  WEB
+  IOS_SHARE
+}
+
+/// Capture ingestion only; never an application or employer-submission status.
+enum CaptureIngestionState {
+  SAVED
+  NEEDS_DETAILS
+  READY
+  FAILED
+}
+
+/// A retry-safe shared job link or pasted posting, available to web and native.
+model Capture {
+  id                   String                @id @default(cuid())
+  /// Client-generated request ID; a retry returns this capture.
+  clientRequestId      String                @unique
+  /// The link as it was shared, kept even when its dedupe key is normalized.
+  originalUrl          String
+  /// Canonical URL key used to collapse tracking variants of the same link.
+  dedupeUrl            String                @unique
+  /// An employer posting URL supplied by the user, not discovered automatically.
+  canonicalEmployerUrl String                @default("")
+  /// Posting text explicitly shared or pasted by the user.
+  text                 String                @default("")
+  note                 String                @default("")
+  source               CaptureSource         @default(WEB)
+  ingestionState       CaptureIngestionState @default(SAVED)
+  /// A user-safe reason, if an ingestion attempt fails.
+  ingestionError       String                @default("")
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+
+  @@index([ingestionState, updatedAt])
+}
+
 // ─── Job agent (E16) ─────────────────────────────────────────────────────────
 
 /// Recurring queries; provider and credentials remain global settings.

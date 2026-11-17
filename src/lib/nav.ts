@@ -1,4 +1,4 @@
-import { Bot, BriefcaseBusiness, FileText, Gauge, House, Inbox, Rocket, Search, Settings, UserRound, type LucideIcon } from "lucide-react";
+import { Bot, Bookmark, BriefcaseBusiness, FileText, Gauge, House, Inbox, Rocket, Search, Settings, UserRound, type LucideIcon } from "lucide-react";
 
 // The app's sections, shared by the sidebar and the page bar so they always agree.
 
@@ -36,6 +36,7 @@ export const NAV: { label?: string; items: NavItem[] }[] = [
         // A new application becomes one, so the flow belongs to Applications.
         isActive: (pathname) => within(pathname, "/applications") || within(pathname, "/new"),
       },
+      { href: "/captures", label: "Capture Inbox", icon: Bookmark },
       { href: "/inbox", label: "Inbox", icon: Inbox },
     ],
   },

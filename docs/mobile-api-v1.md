@@ -168,7 +168,7 @@ Error messages are safe to display. Invalid, expired, and revoked tokens share t
 - `GET /applications` uses `loadApplicationRows({ archived: false, sort: DEFAULT_SORT })` from `src/lib/applications-data.ts`, then applies the v1 keyset page boundary and ISO timestamp mapping.
 - `GET /profile` returns `loadProfile()` from `src/lib/profile-data.ts` unchanged.
 - `GET /applications/{id}` performs a narrow Prisma select in `src/lib/mobile/resources.ts` and uses the shared extraction and match schemas. The existing page loader is coupled to Next's `notFound()` boundary and loads page-only relations, so it is not suitable for a JSON API response.
-- `/captures` is reserved for integration after the capture-service owner and parent reconcile that contract. This slice does not add a capture model, service, or handler.
+- `GET /captures?cursor=<id>` returns `{ items, nextCursor }`. POST accepts `{ url, text?, note?, clientRequestId }` and returns `{ capture }`. Reuse the request ID on retries. Both use the same service as the web capture Inbox. Each capture includes `id`, `url` (original URL), `text`, `note`, `state`, `canonicalEmployerUrl`, `createdAt`, and `updatedAt`. A capture conflict returns HTTP 409 with code `conflict`. Capture performs no network fetch.
 
 ## Migration and rollout
 
