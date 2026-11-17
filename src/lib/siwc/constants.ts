@@ -1,7 +1,9 @@
 export const AUTH_URL = "https://auth.openai.com/api/accounts/authorize";
 export const TOKEN_URL = "https://auth.openai.com/api/accounts/oauth/token";
 export const DISCOVERY_URL = "https://auth.openai.com/.well-known/openid-configuration";
-export const ISSUER = "https://auth.openai.com/";
+// OpenID discovery publishes this issuer without a trailing slash. Issuer checks
+// are exact, so keep this value identical to both discovery and the ID token.
+export const ISSUER = "https://auth.openai.com";
 export const RESOURCE = "https://api.openai.com/v1";
 export const DYNAMIC_CLIENT = "dynamic_agent_client";
 export const AGENT_NAME_HINT = "Dossier";

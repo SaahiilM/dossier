@@ -35,7 +35,7 @@ vi.mock("@/components/toast", () => ({
 }));
 
 const base: NonNullable<Parameters<typeof SubscriptionProviderSection>[0]["initial"]> = {
-  chatGpt: { runtimeAvailable: false, phase: "idle", accounts: [] },
+  chatGpt: { runtimeAvailable: false, phase: "idle", failure: null, accounts: [] },
   claude: { installed: false, auth: "unknown" },
 };
 
@@ -52,6 +52,19 @@ describe("SubscriptionProviderSection", () => {
     expect(screen.queryByText(/accessToken/i)).not.toBeInTheDocument();
   });
 
+  it("shows a safe sign-in validation failure category", () => {
+    render(
+      <SubscriptionProviderSection
+        initial={{
+          chatGpt: { runtimeAvailable: true, phase: "failed", failure: "token_validation", accounts: [] },
+          claude: { installed: false, auth: "unknown" },
+        }}
+      />,
+    );
+    expect(screen.getByRole("alert")).toHaveTextContent(/issuer, audience, signature, or nonce check/i);
+    expect(screen.queryByText(/token_validation/)).not.toBeInTheDocument();
+  });
+
   it("lists redacted ChatGPT accounts and does not expose tokens", () => {
     render(
       <SubscriptionProviderSection
@@ -59,6 +72,7 @@ describe("SubscriptionProviderSection", () => {
           chatGpt: {
             runtimeAvailable: true,
             phase: "idle",
+            failure: null,
             accounts: [{ sub: "sub", clientId: "oaiapp", email: "u@example.com", hasDirectUsage: true }],
           },
           claude: { installed: true, auth: "authenticated" },
@@ -80,7 +94,7 @@ describe("SubscriptionProviderSection", () => {
     render(
       <SubscriptionProviderSection
         initial={{
-          chatGpt: { runtimeAvailable: true, phase: "idle", accounts: [] },
+          chatGpt: { runtimeAvailable: true, phase: "idle", failure: null, accounts: [] },
           claude: { installed: false, auth: "unknown" },
         }}
       />,
@@ -108,6 +122,7 @@ describe("SubscriptionProviderSection", () => {
           chatGpt: {
             runtimeAvailable: true,
             phase: "idle",
+            failure: null,
             accounts: [{ sub: "sub", clientId: "oaiapp", email: "u@example.com", hasDirectUsage: true }],
           },
           claude: { installed: false, auth: "unknown" },

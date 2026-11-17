@@ -17,6 +17,7 @@ const siwc = vi.hoisted(() => ({
   beginSignIn: vi.fn(async () => "https://auth.example/authorize?state=secret"),
   cancelSignIn: vi.fn(),
   disconnect: vi.fn(async () => undefined),
+  signInFailureCode: vi.fn(() => undefined),
   signInResult: vi.fn(() => undefined),
   signInStatus: vi.fn((): import("@/lib/siwc/types").SignInPhase => "idle"),
   status: vi.fn(async () => [
@@ -62,6 +63,7 @@ describe("subscription-actions", () => {
     delete process.env.DOSSIER_SUBSCRIPTION_LOOPBACK;
     vi.clearAllMocks();
     siwc.signInStatus.mockReturnValue("idle");
+    siwc.signInFailureCode.mockReturnValue(undefined);
   });
 
 
@@ -116,6 +118,7 @@ describe("subscription-actions", () => {
       email: "u@example.com",
       hasDirectUsage: true,
     });
+    expect(result.data.failure).toBeNull();
   });
 
   it("disconnect and list models require runtime", async () => {
