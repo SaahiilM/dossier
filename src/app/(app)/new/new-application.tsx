@@ -83,6 +83,12 @@ export type FromPosting = {
   complete: boolean;
 };
 
+/** A capture loaded server-side from the Capture Inbox, never from arbitrary query text. */
+export type FromCapture = {
+  text: string;
+  canonicalEmployerUrl: string;
+};
+
 export function detailsFrom(extracted: Extracted): Details {
   return {
     title: extracted.title ?? "",
@@ -154,6 +160,8 @@ export type NewApplicationProps = {
   fresh?: boolean;
   /** "Start application" on Find jobs: start over from this posting. */
   fromPosting?: FromPosting | null;
+  /** "Continue to application prep" from a saved capture. */
+  fromCapture?: FromCapture | null;
 };
 
 /** The new application flow (E7): paste → read → review → create. */
@@ -165,6 +173,7 @@ export function NewApplication({
   defaultWrite = "both",
   fresh = false,
   fromPosting = null,
+  fromCapture = null,
 }: NewApplicationProps) {
   const [initial] = useState<Draft>(() => ({
     step: "paste",
@@ -213,6 +222,24 @@ export function NewApplication({
     );
     router.replace("/new");
   }, [fromPosting, initial, router]);
+  useEffect(() => {
+    if (!fromCapture) return;
+    draftStore?.set({
+      ...initial,
+      posting: fromCapture.text,
+      // Only an explicit employer URL may be fetched; the original shared
+      // link remains on the capture and is not forwarded to the fetch action.
+      postingUrl: fromCapture.canonicalEmployerUrl,
+    });
+    toast(
+      fromCapture.text.trim()
+        ? "The saved posting text is ready. Check it before reading it."
+        : fromCapture.canonicalEmployerUrl
+          ? "The official employer link is ready. Choose Fetch to review its public posting text."
+          : "This capture still needs posting details. Paste the official text here, or add an employer link in the Capture Inbox.",
+    );
+    router.replace("/new");
+  }, [fromCapture, initial, router]);
   const [starting, setStarting] = useState(false);
   const [fetching, setFetching] = useState(false);
   const [readRevision, setReadRevision] = useState(0);

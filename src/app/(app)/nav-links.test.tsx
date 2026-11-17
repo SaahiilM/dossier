@@ -32,6 +32,7 @@ describe("NavLinks", () => {
       "Startups",
       "Agent",
       "Applications",
+      "Capture Inbox",
       "Inbox",
       "Usage",
       "Settings",
@@ -43,6 +44,7 @@ describe("NavLinks", () => {
     expect(currentItem("/profile")).toEqual(["Profile"]);
     expect(currentItem("/resume")).toEqual(["Base resume"]);
     expect(currentItem("/jobs")).toEqual(["Find jobs"]);
+    expect(currentItem("/captures")).toEqual(["Capture Inbox"]);
     expect(currentItem("/startups")).toEqual(["Startups"]);
     expect(currentItem("/usage")).toEqual(["Usage"]);
     expect(currentItem("/settings")).toEqual(["Settings"]);

@@ -55,7 +55,9 @@ beforeEach(() => {
   sessionStorage.clear();
   vi.mocked(toast).mockReset();
   vi.mocked(startReadingPosting).mockReset().mockResolvedValue({ ok: true, data: "job-1" });
+  vi.mocked(fetchPostingText).mockReset();
   router.push.mockReset();
+  router.replace.mockReset();
   vi.mocked(createApplication).mockReset();
 });
 
@@ -438,6 +440,20 @@ describe("keeping the draft (E7-7)", () => {
   it("says when only the start of the posting came through", () => {
     render(<NewApplication {...props} fromPosting={{ id: "posting-1", text: "Ledgerly: Designer\n\nThe start…", url: "https://jobs.example/1", complete: false }} />);
     expect(toast).toHaveBeenCalledWith("Only the start of this posting came through. Paste the rest from the posting's page, then read it.");
+  });
+
+  it("loads a persisted capture into New application and only carries its official employer URL", () => {
+    render(
+      <NewApplication
+        {...props}
+        fromCapture={{ text: "Ledgerly: Designer\n\nThe official posting.", canonicalEmployerUrl: "https://careers.example/jobs/1" }}
+      />,
+    );
+    expect(screen.getByLabelText("Job posting")).toHaveValue("Ledgerly: Designer\n\nThe official posting.");
+    expect(screen.getByLabelText(/^Link to the posting/)).toHaveValue("https://careers.example/jobs/1");
+    expect(toast).toHaveBeenCalledWith("The saved posting text is ready. Check it before reading it.");
+    expect(router.replace).toHaveBeenCalledWith("/new");
+    expect(fetchPostingText).not.toHaveBeenCalled();
   });
 
   it("goes back and on again without reading the same posting twice", async () => {
