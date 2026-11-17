@@ -1,0 +1,135 @@
+import Foundation
+
+struct MobileAPIClient {
+    static let defaultServerAddress = "https://dossier.sahmai.party"
+    let serverURL: URL
+    var session: URLSession = .shared
+
+    init(serverAddress: String, session: URLSession = .shared) throws {
+        guard let url = URL(string: serverAddress.trimmingCharacters(in: .whitespacesAndNewlines)),
+              let scheme = url.scheme?.lowercased(),
+              (scheme == "https" || Self.isLocalHTTP(url)),
+              url.host != nil,
+              url.user == nil,
+              url.password == nil,
+              url.query == nil,
+              url.fragment == nil else {
+            throw MobileAPIError.invalidServerURL
+        }
+        self.serverURL = url
+        self.session = session
+    }
+
+    func login(password: String, deviceName: String) async throws -> LoginResponse {
+        let body: [String: String] = ["password": password, "deviceName": deviceName]
+        return try await request(path: "auth/login", method: "POST", body: body, token: nil)
+    }
+
+    func logout(token: String) async throws {
+        let response: LogoutResponse = try await request(path: "auth/logout", method: "POST", token: token)
+        guard response.ok else { throw MobileAPIError.invalidResponse }
+    }
+
+    func applications(cursor: String?, token: String) async throws -> ApplicationPage {
+        var components = URLComponents(url: endpoint("applications"), resolvingAgainstBaseURL: false)
+        if let cursor { components?.queryItems = [URLQueryItem(name: "cursor", value: cursor)] }
+        guard let url = components?.url else { throw MobileAPIError.invalidServerURL }
+        return try await request(url: url, method: "GET", token: token)
+    }
+
+    func application(id: String, token: String) async throws -> ApplicationRecord {
+        var pathCharacters = CharacterSet.urlPathAllowed
+        pathCharacters.remove(charactersIn: "/?#")
+        let encodedID = id.addingPercentEncoding(withAllowedCharacters: pathCharacters) ?? id
+        let envelope: ApplicationEnvelope = try await request(path: "applications/\(encodedID)", method: "GET", token: token)
+        return envelope.application
+    }
+
+    func profile(token: String) async throws -> JSONValue {
+        let envelope: ProfileEnvelope = try await request(path: "profile", method: "GET", token: token)
+        return envelope.profile
+    }
+
+    func createCapture(_ payload: CaptureCreatePayload, token: String) async throws -> CaptureRecord {
+        let envelope: CaptureEnvelope = try await request(path: "captures", method: "POST", body: payload, token: token)
+        return envelope.capture
+    }
+
+    func captures(cursor: String?, token: String) async throws -> CapturePage {
+        var components = URLComponents(url: endpoint("captures"), resolvingAgainstBaseURL: false)
+        if let cursor { components?.queryItems = [URLQueryItem(name: "cursor", value: cursor)] }
+        guard let url = components?.url else { throw MobileAPIError.invalidServerURL }
+        return try await request(url: url, method: "GET", token: token)
+    }
+
+    private func endpoint(_ relativePath: String) -> URL {
+        let root = serverURL.appendingPathComponent("api/mobile/v1", isDirectory: true)
+        return root.appendingPathComponent(relativePath)
+    }
+
+    private func request<T: Decodable>(path: String, method: String, token: String?) async throws -> T {
+        try await request(url: endpoint(path), method: method, token: token)
+    }
+
+    private func request<Body: Encodable, Response: Decodable>(path: String, method: String, body: Body, token: String?) async throws -> Response {
+        let bodyData: Data
+        do { bodyData = try MobileDateCoding.encoder().encode(body) }
+        catch { throw MobileAPIError.encoding }
+        return try await perform(url: endpoint(path), method: method, body: bodyData, token: token)
+    }
+
+    private func request<Response: Decodable>(url: URL, method: String, token: String?) async throws -> Response {
+        try await perform(url: url, method: method, body: nil, token: token)
+    }
+
+    private func perform<Response: Decodable>(url: URL, method: String, body: Data?, token: String?) async throws -> Response {
+        var request = URLRequest(url: url)
+        request.httpMethod = method
+        request.timeoutInterval = 25
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        if let body {
+            request.httpBody = body
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        }
+        if let token { request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
+        let data: Data
+        let response: URLResponse
+        do { (data, response) = try await session.data(for: request) }
+        catch let error as URLError where error.code == .cancelled { throw error }
+        catch { throw MobileAPIError.network(Self.friendlyNetworkMessage(error)) }
+        guard let http = response as? HTTPURLResponse else { throw MobileAPIError.invalidResponse }
+        guard (200..<300).contains(http.statusCode) else {
+            if let envelope = try? MobileDateCoding.decoder().decode(APIErrorEnvelope.self, from: data) {
+                throw MobileAPIError.server(code: envelope.error.code, message: envelope.error.message, status: http.statusCode)
+            }
+            throw MobileAPIError.server(code: "http_\(http.statusCode)", message: "Dossier could not complete that request (\(http.statusCode)).", status: http.statusCode)
+        }
+        do { return try MobileDateCoding.decoder().decode(Response.self, from: data) }
+        catch { throw MobileAPIError.invalidResponse }
+    }
+
+    private static func isLocalHTTP(_ url: URL) -> Bool {
+        guard url.scheme?.lowercased() == "http" else { return false }
+        let host = url.host?.lowercased() ?? ""
+        return host == "localhost" || host == "127.0.0.1" || host == "::1"
+    }
+
+    private static func friendlyNetworkMessage(_ error: Error) -> String {
+        if let urlError = error as? URLError {
+            switch urlError.code {
+            case .notConnectedToInternet, .networkConnectionLost: return "No internet connection. Your saved captures are still on this device."
+            case .timedOut: return "The server took too long to respond. Try again when the connection is stable."
+            case .cannotFindHost, .cannotConnectToHost, .dnsLookupFailed: return "Could not reach this Dossier server. Check the server address and connection."
+            default: break
+            }
+        }
+        return "Could not reach Dossier. Check your connection and try again."
+    }
+}
+
+struct CaptureCreatePayload: Encodable {
+    let url: String
+    let text: String?
+    let note: String?
+    let clientRequestId: String
+}
