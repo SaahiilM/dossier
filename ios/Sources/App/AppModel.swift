@@ -25,6 +25,8 @@ final class AppModel: ObservableObject {
     @Published private(set) var session: StoredSession?
     @Published private(set) var applications: [ApplicationRecord] = []
     @Published private(set) var profile: JSONValue?
+    @Published private(set) var profileBasics: MobileProfileBasics?
+    @Published private(set) var profileReadyOverride: Bool?
     @Published private(set) var captureItems: [CaptureOutboxItem] = []
     @Published private(set) var serverCaptures: [CaptureRecord] = []
     @Published private(set) var nextCursor: String?
@@ -51,6 +53,7 @@ final class AppModel: ObservableObject {
     let outboxStore = CaptureOutboxStore()
     private let sharedDefaults = UserDefaults(suiteName: CaptureOutboxStore.appGroupIdentifier)
     private let defaults = UserDefaults.standard
+    private var profileBasicsRevision = 0
 
     init() {
         let address = defaults.string(forKey: Self.serverAddressKey) ?? Self.defaultServerAddress
@@ -152,6 +155,9 @@ final class AppModel: ObservableObject {
         self.session = nil
         applications = []
         profile = nil
+        profileBasicsRevision += 1
+        profileBasics = nil
+        profileReadyOverride = nil
         setupStatus = nil
         setupStatusLoadState = .notChecked
         applicationsSavedAt = nil
@@ -174,6 +180,9 @@ final class AppModel: ObservableObject {
             self.session = nil
             applications = []
             profile = nil
+            profileBasicsRevision += 1
+            profileBasics = nil
+            profileReadyOverride = nil
             setupStatus = nil
             setupStatusLoadState = .notChecked
             applicationsSavedAt = nil
@@ -260,14 +269,67 @@ final class AppModel: ObservableObject {
 
     func refreshProfile() async {
         guard let session else { return }
+        let basicsRevisionAtStart = profileBasicsRevision
         isRefreshingProfile = true
         defer { isRefreshingProfile = false }
         do {
-            profile = try await MobileAPIClient(serverAddress: serverAddress).profile(token: session.accessToken)
+            let fetchedProfile = try await MobileAPIClient(serverAddress: serverAddress).profile(token: session.accessToken)
+            guard self.session?.accessToken == session.accessToken else { return }
+            var currentProfile = fetchedProfile
+            if basicsRevisionAtStart == profileBasicsRevision {
+                let basics = MobileProfileBasics(profile: fetchedProfile)
+                profileBasics = basics
+                profileReadyOverride = !basics.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            } else if let profileBasics, case .object(var fields) = currentProfile {
+                fields["basics"] = profileBasics.jsonValue
+                currentProfile = .object(fields)
+            }
+            profile = currentProfile
             profileSavedAt = Date()
-            if let profile { cacheStore.saveProfile(profile, serverAddress: serverAddress, token: session.accessToken) }
+            cacheStore.saveProfile(currentProfile, serverAddress: serverAddress, token: session.accessToken)
         } catch {
             await handle(error)
+        }
+    }
+
+    func fetchProfileBasics() async throws -> MobileProfileBasics {
+        guard let session else { throw MobileAPIError.missingSession }
+        do {
+            let basics = try await MobileAPIClient(serverAddress: serverAddress).profileBasics(token: session.accessToken)
+            guard self.session?.accessToken == session.accessToken else { throw MobileAPIError.missingSession }
+            profileBasicsRevision += 1
+            profileBasics = basics
+            profileReadyOverride = !basics.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            updateCachedProfileBasics(basics, session: session)
+            return basics
+        } catch let error as MobileAPIError where error.statusCode == 401 {
+            await expireSession()
+            throw MobileAPIError.expiredSession
+        }
+    }
+
+    func saveProfileBasics(_ draft: MobileProfileBasics, comparedTo baseline: MobileProfileBasics) async throws -> MobileProfileBasics {
+        guard let session else { throw MobileAPIError.missingSession }
+        let patch = MobileProfileBasicsPatch(draft: draft, comparedTo: baseline)
+        guard !patch.isEmpty else { return baseline }
+        do {
+            let basics = try await MobileAPIClient(serverAddress: serverAddress).updateProfileBasics(patch, token: session.accessToken)
+            guard self.session?.accessToken == session.accessToken else { throw MobileAPIError.missingSession }
+            profileBasicsRevision += 1
+            profileBasics = basics
+            profileReadyOverride = !basics.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            if let status = setupStatus {
+                setupStatus = MobileSetupStatus(
+                    profileReady: profileReadyOverride ?? false,
+                    aiConfigured: status.aiConfigured,
+                    setupInProgress: status.setupInProgress
+                )
+            }
+            updateCachedProfileBasics(basics, session: session)
+            return basics
+        } catch let error as MobileAPIError where error.statusCode == 401 {
+            await expireSession()
+            throw MobileAPIError.expiredSession
         }
     }
 
@@ -403,6 +465,10 @@ final class AppModel: ObservableObject {
         if let snapshot = cacheStore.profileSnapshot(serverAddress: serverAddress, token: session.accessToken) {
             profile = snapshot.profile
             profileSavedAt = snapshot.savedAt
+            let basics = MobileProfileBasics(profile: snapshot.profile)
+            profileBasicsRevision += 1
+            profileBasics = basics
+            profileReadyOverride = !basics.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         }
         if let snapshot = cacheStore.captureSnapshot(serverAddress: serverAddress, token: session.accessToken) {
             serverCaptures = snapshot.items
@@ -437,6 +503,14 @@ final class AppModel: ObservableObject {
         if let session {
             cacheStore.saveCaptures(serverCaptures, serverAddress: serverAddress, token: session.accessToken)
         }
+    }
+
+    private func updateCachedProfileBasics(_ basics: MobileProfileBasics, session: StoredSession) {
+        guard case .object(var fields)? = profile else { return }
+        fields["basics"] = basics.jsonValue
+        profile = .object(fields)
+        profileSavedAt = Date()
+        cacheStore.saveProfile(.object(fields), serverAddress: serverAddress, token: session.accessToken)
     }
 
     private func upsertApplication(_ record: ApplicationRecord) {
@@ -478,6 +552,9 @@ final class AppModel: ObservableObject {
         self.session = nil
         applications = []
         profile = nil
+        profileBasicsRevision += 1
+        profileBasics = nil
+        profileReadyOverride = nil
         setupStatus = nil
         setupStatusLoadState = .notChecked
         serverCaptures = []

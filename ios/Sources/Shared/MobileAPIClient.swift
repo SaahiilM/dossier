@@ -139,6 +139,21 @@ struct MobileAPIClient {
         return envelope.profile
     }
 
+    func profileBasics(token: String) async throws -> MobileProfileBasics {
+        let envelope: MobileProfileBasicsEnvelope = try await request(path: "profile/basics", method: "GET", token: token)
+        return envelope.basics
+    }
+
+    func updateProfileBasics(_ patch: MobileProfileBasicsPatch, token: String) async throws -> MobileProfileBasics {
+        let envelope: MobileProfileBasicsEnvelope = try await request(
+            path: "profile/basics",
+            method: "PATCH",
+            body: patch,
+            token: token
+        )
+        return envelope.basics
+    }
+
     /// Returns nil when the server predates the optional mobile setup endpoint.
     func setupStatus(token: String) async throws -> MobileSetupStatus? {
         do {
