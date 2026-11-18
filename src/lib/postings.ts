@@ -1,13 +1,11 @@
 import "server-only";
 
 import type { Posting, Prisma } from "@/generated/prisma/client";
-import { breakdownOf, isOlderScore } from "@/lib/fit";
+import { breakdownOf, isOlderScore, parsePostingFitMeta } from "@/lib/fit";
 import { bestFit, linkKey, postingKey, type FoundPosting, type PostingState, type ProfileFit } from "@/lib/job-search/search";
 import { stringsOf } from "@/lib/agent/candidates";
 import { lockAgentSearches } from "@/lib/agent/searches";
 import { prisma } from "@/lib/prisma";
-import { loadScoringConfig } from "@/lib/scoring/config";
-import { scoreInputFingerprint } from "@/lib/scoring/fingerprint";
 
 // Postings in the positions library (E22-5): every posting a search found,
 // and what the user did with it (E14-5): saved, dismissed, or started an
@@ -128,7 +126,6 @@ export async function postingStates(
   { withScores = true }: { withScores?: boolean } = {},
 ): Promise<Map<string, PostingState>> {
   if (found.length === 0) return new Map();
-  const referenceDate = new Date();
   const refs = found.map(({ source, externalId }) => ({ source, externalId }));
   const [stored, applications, scores, candidates] = await Promise.all([
     db.posting.findMany({
@@ -150,15 +147,18 @@ export async function postingStates(
     }),
     // An agent draft waiting for review isn't applied for yet (#195).
     db.application.findMany({ where: { postingUrl: { not: "" }, awaitingReview: false }, select: { id: true, postingUrl: true }, orderBy: { createdAt: "asc" } }),
-    db.postingScore.findMany({ where: { OR: refs }, include: { profile: { select: { name: true, sort: true, createdAt: true } } } }),
+    withScores
+      ? db.postingScore.findMany({ where: { OR: refs }, include: { profile: { select: { name: true, sort: true, createdAt: true } } } })
+      : Promise.resolve([]),
     // A posting the agent only skipped (E32-5) isn't one of its finds.
     db.agentCandidate.findMany({ where: { OR: refs, skipReason: null }, select: { id: true, source: true, externalId: true, status: true, applicationId: true } }),
   ]);
   const candidateOf = new Map(candidates.map((candidate) => [postingKey(candidate), candidate]));
   // Each posting's scores, a profile's name only when there are several (E25-5).
-  const several = new Set(scores.map((row) => row.profileId)).size > 1 || (scores.length > 0 && (await db.profile.count()) > 1);
+  const several = withScores && (new Set(scores.map((row) => row.profileId)).size > 1 || (scores.length > 0 && (await db.profile.count()) > 1));
   const scoresOf = new Map<string, ProfileFit[]>();
   for (const row of scores.toSorted((a, b) => a.profile.sort - b.profile.sort || a.profile.createdAt.getTime() - b.profile.createdAt.getTime())) {
+    const meta = parsePostingFitMeta(row.meta);
     const fit: ProfileFit = {
       profileId: row.profileId,
       profileName: several ? row.profile.name : "",
@@ -166,6 +166,7 @@ export async function postingStates(
       reasons: stringsOf(row.reasons),
       redFlags: stringsOf(row.redFlags),
       breakdown: breakdownOf(row.breakdown),
+      ...(meta ? { meta } : {}),
       older: isOlderScore(row.scoredWith),
     };
     scoresOf.set(postingKey(row), [...(scoresOf.get(postingKey(row)) ?? []), fit]);

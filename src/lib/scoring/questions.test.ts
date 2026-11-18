@@ -46,6 +46,23 @@ describe("scoringState (E25-1)", () => {
     });
   });
 
+  it("sends only the user's explicit work-authorization facts with the location factor", () => {
+    const withAuthorization: ScoringProfile = {
+      ...profile,
+      data: {
+        ...data,
+        workAuthorization: {
+          ...data.workAuthorization,
+          authorizedCountries: ["Netherlands"],
+          needsSponsorshipNow: false,
+        },
+      },
+    };
+    expect(scoringState(posting, withAuthorization).candidate.location).toMatchObject({
+      workAuthorization: { authorizedCountries: ["Netherlands"], needsSponsorshipNow: false },
+    });
+  });
+
   it("never sends the name, contact details, references, links or credential ids", () => {
     for (const secret of [base.basics.name, base.basics.email, base.basics.phone, "linkedin.com", "XYZ-123", "verify.example", "doi.example", "studio.example", ...base.references.map((reference) => reference.name)]) {
       expect(text).not.toContain(secret);

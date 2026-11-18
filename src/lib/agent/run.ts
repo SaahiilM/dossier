@@ -22,15 +22,17 @@ import { saveScore } from "@/lib/posting-scores";
 import { postingStates } from "@/lib/postings";
 import { prisma } from "@/lib/prisma";
 import { levelsProblem, listProfiles, profileIdOr, type LevelsProblem } from "@/lib/profiles";
-import { breakdownOf, type PostingFit } from "@/lib/fit";
+import { breakdownOf, fitAutoDraftBlocked, parsePostingFitMeta, type PostingFit } from "@/lib/fit";
 import { loadPostingScorer, loadScoringProfile, scoringProblem } from "@/lib/scoring";
+import { loadScoringConfig } from "@/lib/scoring/config";
+import { scoreInputFingerprint } from "@/lib/scoring/fingerprint";
 import type { ScoringProfile } from "@/lib/scoring/questions";
 import { loadSettings } from "@/lib/settings-data";
 import { agentCoversOf, type SettingsData, type AgentSearchRun } from "@/lib/settings";
 import { lastKnownTimeZone } from "@/lib/time-zone";
 
 import { attributeAgentCandidates } from "./attribution";
-import { agentDedupeKey, candidateCoverage, candidateData, stringsOf, type SkipReason } from "./candidates";
+import { agentDedupeKey, candidateCoverage, candidateData, postingFitFromCandidate, stringsOf, type SkipReason } from "./candidates";
 import { agentDraftJob, draftJobKey } from "./draft";
 import { reconcileInterruptedRuns, recordRunEnd, recordSourceRequest, reserveRun } from "./runs";
 import { listAgentSearches } from "./searches";
@@ -347,36 +349,62 @@ async function evaluateAgentPostings(
   const covers = agentCoversOf(settings);
   if (fresh.length === 0) return { ...counts, scored: 0, message: postings.length === 0 ? "The search found no postings this time." : "No new postings this time." };
 
-  // Scores kept before, per profile (E25-5): they cost nothing again.
-  const scoreKey = (posting: Pick<FoundPosting, "source" | "externalId">, profileId: string) => `${postingKey(posting)}|${profileId}`;
-  const known = new Map(
-    (await prisma.postingScore.findMany({ where: { OR: fresh.map(({ source, externalId }) => ({ source, externalId })) } })).map((row) => [
-      scoreKey(row, row.profileId),
-      { data: { score: row.score, reasons: stringsOf(row.reasons), redFlags: stringsOf(row.redFlags), breakdown: breakdownOf(row.breakdown) }, scoredWith: row.scoredWith },
-    ]),
-  );
+  const scoringConfig = await loadScoringConfig();
+  const referenceDate = new Date();
   // Each profile, read once: its levels must be chosen before anything is scored with it (E24-3), and nothing guesses them.
   const all = await listProfiles();
   const levelsWait = new Map<string, LevelsProblem | null>();
   for (const { id } of all) levelsWait.set(id, await levelsProblem(id));
-  const asked = new Map<string | null, string[]>();
+  const asked = new Map<string | null | "all", string[]>();
   for (const posting of fresh) {
     const wanted = profileOf(posting);
     if (!asked.has(wanted)) asked.set(wanted, wanted === "all" ? all.map((profile) => profile.id) : [await profileIdOr(wanted)]);
   }
   /** The profiles a posting is scored against: those asked for whose levels are chosen. */
   const targetsOf = (posting: FoundPosting) => asked.get(profileOf(posting))!.filter((id) => !levelsWait.get(id));
+  const loaded = new Map<string, ScoringProfile>();
+  const profileData = async (id: string) => {
+    let profile = loaded.get(id);
+    if (!profile) {
+      profile = await loadScoringProfile(id);
+      loaded.set(id, profile);
+    }
+    return profile;
+  };
+
+  // Scores kept before, per profile (E25-5): reuse only a score whose stored
+  // fingerprint still matches that profile, workplace, scorer and posting.
+  const scoreKey = (posting: Pick<FoundPosting, "source" | "externalId">, profileId: string) => `${postingKey(posting)}|${profileId}`;
+  const freshByKey = new Map(fresh.map((posting) => [postingKey(posting), posting]));
+  const known = new Map<string, { data: PostingFit; scoredWith: string; inputFingerprint: string }>();
+  const rows = await prisma.postingScore.findMany({ where: { OR: fresh.map(({ source, externalId }) => ({ source, externalId })) } });
+  for (const row of rows) {
+    const posting = freshByKey.get(postingKey(row));
+    if (!posting || !targetsOf(posting).includes(row.profileId)) continue;
+    const fingerprint = scoreInputFingerprint(await profileData(row.profileId), posting, scoringConfig, referenceDate);
+    if (!row.inputFingerprint || row.inputFingerprint !== fingerprint) continue;
+    known.set(scoreKey(row, row.profileId), {
+      data: {
+        score: row.score,
+        reasons: stringsOf(row.reasons),
+        redFlags: stringsOf(row.redFlags),
+        breakdown: breakdownOf(row.breakdown),
+        meta: parsePostingFitMeta(row.meta),
+      },
+      scoredWith: row.scoredWith,
+      inputFingerprint: fingerprint,
+    });
+  }
   const unscored = fresh.filter((posting) => targetsOf(posting).some((id) => !known.has(scoreKey(posting, id))));
   // The cap counts postings, whatever number of profiles each is scored against (M1c).
   const toScore = new Set(unscored.slice(0, settings.agentMaxScores));
   const evaluated = fresh.filter((posting) => targetsOf(posting).length > 0 && (toScore.has(posting) || targetsOf(posting).every((id) => known.has(scoreKey(posting, id)))));
   await context.step(`Scoring ${toScore.size} ${toScore.size === 1 ? "posting" : "postings"}`);
-  const score = await loadPostingScorer();
-  const loaded = new Map<string, ScoringProfile>();
-  const profileData = async (id: string) => loaded.get(id) ?? loaded.set(id, await loadScoringProfile(id)).get(id)!;
+  const score = toScore.size > 0 ? await loadPostingScorer(scoringConfig) : null;
   let scored = 0;
   let queued = 0;
   const kept: string[] = [];
+  const keptProfileIds = new Map<string, string>();
   // A profile whose postings wait for its levels: the first asked for and left out.
   const blockedId = fresh.flatMap((posting) => (targetsOf(posting).length === 0 ? asked.get(profileOf(posting))! : [])).find((id) => levelsWait.get(id));
   const blocked = blockedId ? levelsWait.get(blockedId)! : null;
@@ -385,14 +413,20 @@ async function evaluateAgentPostings(
     if (context.signal.aborted) break;
     try {
       // Each profile it's scored against; the candidate keeps the best.
-      let best: { data: PostingFit; scoredWith: string } | null = null;
+      let best: { data: PostingFit; scoredWith: string; inputFingerprint: string; profileId: string } | null = null;
       for (const id of targetsOf(posting)) {
-        const answer = known.get(scoreKey(posting, id)) ?? (await score(posting, await profileData(id), context.signal));
+        const key = scoreKey(posting, id);
+        const cached = known.get(key);
+        const profile = await profileData(id);
+        const inputFingerprint = cached?.inputFingerprint ?? scoreInputFingerprint(profile, posting, scoringConfig, referenceDate);
+        const answer = cached ?? (await score!(posting, profile, context.signal));
         if (context.signal.aborted) break;
         // Positions shows it too (#208).
-        if (!known.has(scoreKey(posting, id))) await saveScore(posting, answer.data, answer.scoredWith, id);
+        if (!cached) await saveScore(posting, answer.data, answer.scoredWith, id, inputFingerprint);
         // The best coverage (E32-2), as Best fit orders it.
-        if (!best || byBestFit({ coverage: coverageOf(answer.data), at: 0 }, { coverage: coverageOf(best.data), at: 0 }) < 0) best = answer;
+        if (!best || byBestFit({ coverage: coverageOf(answer.data), at: 0 }, { coverage: coverageOf(best.data), at: 0 }) < 0) {
+          best = { ...answer, inputFingerprint, profileId: id };
+        }
       }
       if (!best) continue;
       const { data } = best;
@@ -400,8 +434,9 @@ async function evaluateAgentPostings(
       // Respect cancellation before writing, but this is not an atomic fence
       // against imports/wipes; that needs the broader background-job lifecycle.
       if (context.signal.aborted) break;
-      const candidate = await keepCandidate(posting, data);
+      const candidate = await keepCandidate(posting, data, best.scoredWith, best.inputFingerprint);
       kept.push(candidate.id);
+      keptProfileIds.set(candidate.id, best.profileId);
       scored += 1;
       if (passes(coverageOf(data), covers)) queued += 1;
     } catch (error) {
@@ -420,14 +455,36 @@ async function evaluateAgentPostings(
   let drafted = 0;
   if (settings.agentAutoDraft && settings.agentMaxDrafts > 0 && !context.signal.aborted) {
     // Best fit first; one with no requirements is never drafted on its own (decided 17 November).
-    const best = (
-      await prisma.agentCandidate.findMany({
+    const candidates = await prisma.agentCandidate.findMany({
         where: { id: { in: kept }, status: AgentCandidateStatus.SCORED, skipReason: null, requirements: { gt: 0 } },
-        select: { id: true, covered: true, requirements: true, mustMissing: true, createdAt: true },
+        select: {
+          id: true,
+          score: true,
+          reasons: true,
+          redFlags: true,
+          meta: true,
+          scoredWith: true,
+          inputFingerprint: true,
+          title: true,
+          company: true,
+          place: true,
+          remote: true,
+          salary: true,
+          description: true,
+          covered: true,
+          requirements: true,
+          mustMissing: true,
+          createdAt: true,
+        },
+      });
+    const best = candidates
+      .flatMap((candidate) => {
+        const profileId = keptProfileIds.get(candidate.id);
+        if (!profileId) return [];
+        const fit = postingFitFromCandidate(candidate, loaded.get(profileId)!, scoringConfig, referenceDate);
+        const coverage = candidateCoverage(candidate);
+        return !fitAutoDraftBlocked(fit) && passes(coverage, covers) ? [{ id: candidate.id, coverage, at: candidate.createdAt.getTime() }] : [];
       })
-    )
-      .map((candidate) => ({ id: candidate.id, coverage: candidateCoverage(candidate), at: candidate.createdAt.getTime() }))
-      .filter((candidate) => passes(candidate.coverage, covers))
       .sort(byBestFit)
       .slice(0, settings.agentMaxDrafts);
     // Drafts it prepares on its own say so when they're ready (E26-6).
@@ -453,8 +510,8 @@ async function evaluateAgentPostings(
  * Keeps a scored posting as a candidate; one a run skipped before (E32-5)
  * becomes that candidate, with its skip gone.
  */
-async function keepCandidate(posting: FoundPosting, fit: PostingFit): Promise<{ id: string }> {
-  const data = candidateData(posting, fit);
+async function keepCandidate(posting: FoundPosting, fit: PostingFit, scoredWith: string, inputFingerprint: string): Promise<{ id: string }> {
+  const data = candidateData(posting, fit, scoredWith, inputFingerprint);
   const skipped = await prisma.agentCandidate.findFirst({
     where: { skipReason: { not: null }, OR: [{ source: posting.source, externalId: posting.externalId }, { dedupeKey: agentDedupeKey(posting) }] },
     select: { id: true },

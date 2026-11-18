@@ -4,7 +4,7 @@ import { saveSettings } from "@/lib/settings-data";
 import { PROVIDER_DEFAULTS_STUB } from "@/test/ai-config-mock";
 import { createTestClient, resetDatabase } from "@/test/db";
 
-import { countAgentQueue, loadAgentView } from "./view";
+import { agentQueueFitSummary, countAgentQueue, loadAgentView } from "./view";
 import { withAgentScanLock } from "./scan-lock";
 
 const db = vi.hoisted(() => ({ client: undefined as ReturnType<typeof createTestClient> | undefined }));
@@ -48,6 +48,11 @@ beforeEach(async () => {
 afterAll(() => prisma().$disconnect());
 
 describe("the Agent screen's data (E16-6)", () => {
+  it("reports stale and unreviewed candidates to the connector", async () => {
+    await candidate("unscored-metadata", 90, { requirements: 1, covered: 1 });
+    expect(await agentQueueFitSummary(now)).toEqual({ stale: 1, needsReview: 1, autoDraftBlocked: 1 });
+  });
+
   it("links missing Jev credentials to Settings → Scoring", async () => {
     await saveSettings({ scorer: "JEV" });
     expect(await loadAgentView(now)).toMatchObject({ setupSection: "scoring", setupProblem: "Enter your TypeSafe key in Settings → Scoring first." });

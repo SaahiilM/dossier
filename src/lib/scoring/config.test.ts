@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { DECISIONS_KEY, encryptSecret, JOB_SOURCE_KEY, OPENROUTER_SCORING_KEY, TYPESAFE_KEY } from "@/lib/secrets";
 
 import { resolveScoringConfig, scorerKey, scoringView } from "./config";
+import { decisionModelOnSelect, OPENROUTER_DECISION_MODEL } from "./scorers";
 
 vi.mock("@/lib/env", () => ({ env: { DOSSIER_SECRET: "a".repeat(32) } }));
 
@@ -10,8 +11,9 @@ const nothingSaved = { scorer: null, typesafeKeyEnc: null };
 
 describe("resolveScoringConfig (#274, E25-2)", () => {
   it("scores with the AI model until something chooses another, with each key's state", () => {
-    expect(resolveScoringConfig(nothingSaved, {})).toEqual({ scorer: "AI", saved: false, keys: { JEV: { key: null, keyState: "none" }, DECISIONS: { key: null, keyState: "none" }, OPENROUTER: { key: null, keyState: "none" } }, openrouterModel: "openai/gpt-6-luna" });
+    expect(resolveScoringConfig(nothingSaved, {})).toEqual({ scorer: "AI", saved: false, keys: { JEV: { key: null, keyState: "none" }, DECISIONS: { key: null, keyState: "none" }, OPENROUTER_DECISIONS: { key: null, keyState: "none" }, OPENROUTER: { key: null, keyState: "none" } }, openrouterModel: "openai/gpt-6-luna" });
     expect(resolveScoringConfig(nothingSaved, { DOSSIER_SCORER: "jev", DOSSIER_TYPESAFE_KEY: "ts_env" })).toMatchObject({ scorer: "JEV", saved: false, keys: { JEV: { key: "ts_env", keyState: "env" } } });
+    expect(resolveScoringConfig(nothingSaved, { DOSSIER_SCORER: "openrouter-decisions" })).toMatchObject({ scorer: "OPENROUTER_DECISIONS", openrouterModel: OPENROUTER_DECISION_MODEL });
   });
 
   it("prefers what's saved in Settings to DOSSIER_SCORER and the key's variable", () => {
@@ -35,6 +37,20 @@ describe("the keys of OpenAI Decisions and OpenRouter, and OpenRouter's model (E
     });
     expect(resolveScoringConfig({ ...saved, openrouterScoringKeyEnc: encryptSecret(OPENROUTER_SCORING_KEY, "sk-or") }, {}).keys.OPENROUTER).toEqual({ key: "sk-or", keyState: "set" });
   });
+
+  it("keeps reading the fork's encrypted OpenRouter key and decision model through the upstream config shape", () => {
+    const legacy = {
+      ...nothingSaved,
+      scorer: "OPENROUTER_DECISIONS" as const,
+      openRouterScoringKeyEnc: encryptSecret(OPENROUTER_SCORING_KEY, "sk-or-legacy"),
+      openRouterScoringModel: "parallel/decisions-fast:free",
+    };
+    expect(resolveScoringConfig(legacy, {})).toMatchObject({
+      scorer: "OPENROUTER_DECISIONS",
+      keys: { OPENROUTER_DECISIONS: { key: "sk-or-legacy", keyState: "set" } },
+      openrouterModel: "parallel/decisions-fast:free",
+    });
+  });
 });
 
 describe("scorerKey and scoringView", () => {
@@ -47,5 +63,11 @@ describe("scorerKey and scoringView", () => {
 
   it("never shows a key", () => {
     expect(scoringView({ scorer: "JEV", saved: true, keys: { JEV: { key: "ts_secret", keyState: "set" } }, openrouterModel: "openai/gpt-6-luna" })).toEqual({ scorer: "JEV", keys: { JEV: "set" }, openrouterModel: "openai/gpt-6-luna" });
+  });
+
+  it("keeps a selected free decision model and supplies the default when switching scorers", () => {
+    expect(decisionModelOnSelect(null, "OPENROUTER_DECISIONS")).toBe(OPENROUTER_DECISION_MODEL);
+    expect(decisionModelOnSelect("parallel/decisions-fast:free", "OPENROUTER_DECISIONS")).toBeUndefined();
+    expect(decisionModelOnSelect("openai/gpt-6-luna", "OPENROUTER")).toBeUndefined();
   });
 });

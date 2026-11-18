@@ -3,12 +3,12 @@ import "server-only";
 import { z } from "zod";
 
 import { AiError } from "@/lib/ai/errors";
-import type { PostingFit } from "@/lib/fit";
-import type { ProfileData } from "@/lib/profile";
+import { MAX_POSTING_CHARACTERS } from "@/lib/ai/tasks/prompt-parts";
 import type { UsageSink } from "@/lib/usage";
 
-import { jevFit, jevParts, jevPostingText, jevQuestions, jevState, type JevPosting } from "./legacy-jev";
+import type { FactorAnswers } from "./factors";
 import { postingLines } from "./posting-lines";
+import { answersFromTyped, engineQuestions, scoringState, type ScoringPosting, type ScoringProfile } from "./questions";
 import { OPENROUTER_DECISION_MODEL } from "./scorers";
 import { answerSchema, type Answer, type Question } from "./typesafe";
 
@@ -17,8 +17,8 @@ import { answerSchema, type Answer, type Question } from "./typesafe";
 // Catalog: GET https://openrouter.ai/api/v1/models?output_modalities=decisions
 // Body fields: model, state, questions, provider.allow_fallbacks false.
 // This file does not import benchmarks/. The pins match benchmarks/contract.json.
-// Direct scorer: the same questions, weights, and line evidence as Jev.
-// It is not the benchmark early-gate plus chat cascade.
+// Production scoring uses the shared AienTech factor engine. Legacy Jev
+// benchmark behavior stays isolated under benchmarks/ for compatibility.
 
 import { SCORE_POSTING_OPENROUTER_DECISIONS_VERSION } from "./versions";
 export { SCORE_POSTING_OPENROUTER_DECISIONS_VERSION } from "./versions";
@@ -298,20 +298,20 @@ export function decisionScoredWith(model: string, costUsd: number | null): strin
  *
  */
 export async function scoreWithOpenRouterDecisions(
-  posting: JevPosting,
-  profile: ProfileData,
+  posting: ScoringPosting,
+  profile: ScoringProfile,
   { key, model, signal, fetchImpl, timeoutMs, retryDelaysMs, onUsage, today = new Date() }: AskDecisionOptions & { model: string; today?: Date },
-): Promise<{ data: PostingFit; scoredWith: string }> {
+): Promise<{ answers: FactorAnswers; scoredWith: string }> {
   const pin = await resolveDecisionPin(model, { fetchImpl, signal });
-  const text = jevPostingText(posting.description);
+  const text = posting.description.trim().slice(0, MAX_POSTING_CHARACTERS);
   const trimmed = { ...posting, description: text };
   const lines = postingLines(text);
   const result = await askOpenRouterDecision(
-    { model: pin.id, canonicalSnapshot: pin.canonicalSnapshot, state: jevState(trimmed, profile, today), questions: jevQuestions(lines) },
+    { model: pin.id, canonicalSnapshot: pin.canonicalSnapshot, state: scoringState(trimmed, profile, today), questions: engineQuestions(lines) },
     { key, signal, fetchImpl, timeoutMs, retryDelaysMs, onUsage, usageTask: "score-posting-openrouter-decisions" },
   );
-  const parts = jevParts(result.answers, lines, (id) => new AiError("invalid-output", INVALID, `OpenRouter decision answer without ${id}`));
-  return { data: jevFit(parts), scoredWith: decisionScoredWith(result.model, result.usage.costUsd) };
+  const answers = answersFromTyped(result.answers, lines, (detail) => new AiError("invalid-output", INVALID, `OpenRouter decision answer: ${detail}`));
+  return { answers, scoredWith: decisionScoredWith(result.model, result.usage.costUsd) };
 }
 
 /** One short decisions question, for Settings → Scoring and onboarding. */

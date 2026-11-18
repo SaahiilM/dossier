@@ -1,8 +1,11 @@
 import { createHash } from "node:crypto";
 
-import type { Prisma } from "@/generated/prisma/client";
+import type { AgentCandidate, Prisma } from "@/generated/prisma/client";
 import { linkKey, type FoundPosting } from "@/lib/job-search/search";
-import type { Breakdown } from "@/lib/scoring/factors";
+import { parsePostingFitMeta, type PostingFit } from "@/lib/fit";
+import type { ScoringConfig } from "@/lib/scoring/config";
+import { scoreInputFingerprint } from "@/lib/scoring/fingerprint";
+import type { ScoringProfile } from "@/lib/scoring/questions";
 import { coverageOf, type Coverage } from "@/lib/posting-coverage";
 
 // The job agent's candidates (E16): postings it found and scored. A dismissed
@@ -31,9 +34,14 @@ export function agentDedupeKey(posting: Pick<FoundPosting, "source" | "externalI
   return createHash("sha256").update(basis).digest("hex");
 }
 
-/** A posting as a new candidate, with its score. */
-export function candidateData(posting: FoundPosting, score: { score: number; reasons: string[]; redFlags: string[]; breakdown?: Breakdown | null }): Prisma.AgentCandidateCreateInput {
-  const coverage = coverageOf(score);
+/** A posting as a new candidate, with its score and provenance. */
+export function candidateData(
+  posting: FoundPosting,
+  fit: Pick<PostingFit, "score" | "reasons" | "redFlags" | "meta" | "breakdown">,
+  scoredWith = "",
+  inputFingerprint: string | null = null,
+): Prisma.AgentCandidateCreateInput {
+  const coverage = coverageOf(fit);
   return {
     source: posting.source,
     externalId: posting.externalId,
@@ -47,13 +55,46 @@ export function candidateData(posting: FoundPosting, score: { score: number; rea
     via: posting.via,
     description: posting.description,
     complete: posting.complete,
-    score: score.score,
-    reasons: score.reasons,
-    redFlags: score.redFlags,
+    score: fit.score,
+    reasons: fit.reasons,
+    redFlags: fit.redFlags,
+    meta: fit.meta ? (fit.meta as Prisma.InputJsonValue) : undefined,
+    scoredWith,
+    inputFingerprint,
     covered: coverage.hit,
     requirements: coverage.total,
     mustMissing: coverage.mustMissing,
     dedupeKey: agentDedupeKey(posting),
+  };
+}
+
+type CandidateFitRow = Pick<
+  AgentCandidate,
+  "score" | "reasons" | "redFlags" | "meta" | "scoredWith" | "inputFingerprint" | "title" | "company" | "place" | "remote" | "salary" | "description"
+>;
+
+/** Agent row as PostingFit for freshness and auto-draft checks. */
+export function postingFitFromCandidate(
+  row: CandidateFitRow,
+  profile: ScoringProfile,
+  config: ScoringConfig,
+  referenceDate: Date,
+): PostingFit {
+  const posting = {
+    title: row.title,
+    company: row.company,
+    place: row.place,
+    remote: row.remote,
+    salary: row.salary,
+    description: row.description,
+  };
+  return {
+    score: row.score,
+    reasons: stringsOf(row.reasons),
+    redFlags: stringsOf(row.redFlags),
+    meta: parsePostingFitMeta(row.meta),
+    scoredWith: row.scoredWith || undefined,
+    stale: !row.inputFingerprint || row.inputFingerprint !== scoreInputFingerprint(profile, posting, config, referenceDate),
   };
 }
 

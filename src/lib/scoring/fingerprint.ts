@@ -2,57 +2,55 @@ import "server-only";
 
 import { createHash } from "node:crypto";
 
-import { profileForPrompt } from "@/lib/ai/tasks/prompt-parts";
+import { MAX_POSTING_CHARACTERS } from "@/lib/ai/tasks/prompt-parts";
 import { SCORE_POSTING_VERSION } from "@/lib/ai/tasks/score-posting";
-import type { ProfileData } from "@/lib/profile";
-import { workAuthorizationForScorer } from "@/lib/work-authorization";
 
 import type { ScoringConfig } from "./config";
-import { JEV_WEIGHTS, jevPostingText, jevQuestions, SCORE_POSTING_JEV_VERSION } from "./legacy-jev";
-import { SCORE_POSTING_OPENROUTER_DECISIONS_VERSION, SCORE_POSTING_OPENROUTER_VERSION } from "./versions";
-import type { ScorablePosting } from "./index";
+import { SCORE_POSTING_DECISIONS_VERSION } from "./decisions";
+import { SCORE_POSTING_JEV_VERSION } from "./jev";
+import { engineQuestions, scoringState, type ScoringPosting, type ScoringProfile } from "./questions";
+import { SCORE_POSTING_OPENROUTER_DECISIONS_VERSION } from "./versions";
 
 const digest16 = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex").slice(0, 16);
 
-/** Stable hash of the posting fields Jev uses when scoring. */
-export function postingContentHash(posting: ScorablePosting): string {
+/** Stable hash of the posting fields the shared factor engine sees. */
+export function postingContentHash(posting: ScoringPosting): string {
   return digest16({
     title: posting.title,
     company: posting.company,
     place: posting.place,
     remote: posting.remote,
     salary: posting.salary,
-    description: jevPostingText(posting.description),
+    description: posting.description.trim().slice(0, MAX_POSTING_CHARACTERS),
   });
 }
 
-/** Changes when questions, weights, or prompt versions change. */
+/** Changes when questions, prompts, or scorer-specific policy changes. */
 export function scorerPolicyVersion(config: ScoringConfig): string {
-  const hash = (payload: unknown) => createHash("sha256").update(JSON.stringify(payload)).digest("hex").slice(0, 12);
-  if (config.scorer === "JEV") return hash({ v: SCORE_POSTING_JEV_VERSION, q: jevQuestions([]), w: JEV_WEIGHTS });
-  if (config.scorer === "OPENROUTER_DECISIONS") {
-    return hash({ v: SCORE_POSTING_OPENROUTER_DECISIONS_VERSION, q: jevQuestions([]), w: JEV_WEIGHTS, m: config.openRouterModel });
-  }
-  if (config.scorer === "OPENROUTER") return hash({ v: SCORE_POSTING_OPENROUTER_VERSION, m: config.openRouterModel });
-  return hash({ v: SCORE_POSTING_VERSION });
+  const version =
+    config.scorer === "JEV"
+      ? SCORE_POSTING_JEV_VERSION
+      : config.scorer === "DECISIONS"
+        ? SCORE_POSTING_DECISIONS_VERSION
+        : config.scorer === "OPENROUTER_DECISIONS"
+          ? SCORE_POSTING_OPENROUTER_DECISIONS_VERSION
+          : SCORE_POSTING_VERSION;
+  return digest16({ scorer: config.scorer, version, questions: engineQuestions([]) });
 }
 
-/** Fingerprint for cache staleness: profile, work auth, scorer policy, posting, reference date. */
+/** Fingerprint for cached scores: profile sections, levels, workplace, work authorization, scorer policy, posting and reference day. */
 export function scoreInputFingerprint(
-  profile: ProfileData,
-  posting: ScorablePosting,
+  profile: ScoringProfile,
+  posting: ScoringPosting,
   config: ScoringConfig,
   referenceDate: Date,
 ): string {
+  const state = scoringState(posting, profile, referenceDate);
   return digest16({
-    profile: JSON.parse(profileForPrompt(profile)),
-    workAuthorization: workAuthorizationForScorer(profile.workAuthorization),
+    profile: state.candidate,
     referenceDate: referenceDate.toISOString().slice(0, 10),
     scorer: config.scorer,
-    model:
-      config.scorer === "OPENROUTER" || config.scorer === "OPENROUTER_DECISIONS"
-        ? config.openRouterModel || null
-        : null,
+    model: config.scorer === "OPENROUTER" || config.scorer === "OPENROUTER_DECISIONS" ? config.openrouterModel : null,
     policy: scorerPolicyVersion(config),
     posting: postingContentHash(posting),
   });

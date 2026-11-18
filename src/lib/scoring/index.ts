@@ -28,8 +28,8 @@ export async function scoringProblem(config?: ScoringConfig): Promise<string | n
  * The scoring model Settings → Scoring chose, set up once for any number of
  * postings. Fails as an AiError when it isn't set up.
  */
-export async function loadPostingScorer(): Promise<PostingScorer> {
-  const config = await loadScoringConfig();
+export async function loadPostingScorer(current?: ScoringConfig): Promise<PostingScorer> {
+  const config = current ?? (await loadScoringConfig());
   const answer = await SCORING_MODELS[config.scorer].load(config);
   return async (posting, profile, signal) => {
     const { answers, scoredWith } = await answer(posting, profile, signal);

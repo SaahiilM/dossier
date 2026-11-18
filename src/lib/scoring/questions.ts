@@ -2,6 +2,7 @@ import { citationText } from "@/lib/citation";
 import { experienceMonths, factTexts, formatDateRange, formatMonthYear, languageLevelLabel, paidRoles, type CustomSection, type ProfileData } from "@/lib/profile";
 import { levelRangeLabel, type LevelRange } from "@/lib/profile-levels";
 import { REMOTE_OPEN_TO, WORK_MODES, type Workplace } from "@/lib/profile-workplace";
+import { workAuthorizationForScorer } from "@/lib/work-authorization";
 
 import { LOCATION_FITS, SENIORITY_FITS, type FactorAnswers, type LevelAnswer, type LocationFit, type RequirementAnswer, type SeniorityFit } from "./factors";
 import type { Answer, ChoiceQuestion, NoulQuestion, Question, ScoreQuestion } from "./typesafe";
@@ -206,6 +207,7 @@ export function scoringState(posting: ScoringPosting, { data: profile, levels, w
   });
   const paid = paidRoles(profile.experience);
   const facts = factTexts(profile.facts);
+  const workAuthorization = workAuthorizationForScorer(profile.workAuthorization);
   const { basics } = profile;
   return {
     posting: { title: posting.title, company: posting.company, place: posting.place, remote: posting.remote, salary: posting.salary, text: posting.description.trim() },
@@ -258,6 +260,7 @@ export function scoringState(posting: ScoringPosting, { data: profile, levels, w
             }
           : {}),
         willingToMove: workplace.relocate ? (workplace.relocatePlaces.length > 0 ? workplace.relocatePlaces : true) : false,
+        ...(workAuthorization ? { workAuthorization } : {}),
       },
     },
   };

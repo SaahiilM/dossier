@@ -6,6 +6,10 @@ import { loadApplicationRows } from "@/lib/applications-data";
 import { DEFAULT_SORT } from "@/lib/applications-list";
 import { loadDashboard } from "@/lib/dashboard-data";
 import { postingStates } from "@/lib/postings";
+import { loadScoringConfig } from "@/lib/scoring/config";
+import { scoreInputFingerprint } from "@/lib/scoring/fingerprint";
+import { loadScoringProfile } from "@/lib/scoring";
+import { saveSettings } from "@/lib/settings-data";
 import { createTestClient, resetDatabase, TEST_PROFILE_ID } from "@/test/db";
 
 import { seedBuiltIns } from "../../../prisma/seed/built-ins";
@@ -161,14 +165,49 @@ describe("preparing a draft (E16-5)", () => {
     const { emit } = await import("@/lib/notifications/notify");
     const { agentDraftJob } = await import("./draft");
     vi.mocked(emit).mockClear();
-    const own = await candidate();
+    const [profile, config] = await Promise.all([loadScoringProfile(TEST_PROFILE_ID), loadScoringConfig()]);
+    const inputFingerprint = scoreInputFingerprint(profile, posting, config, new Date());
+    await saveSettings({ agentAutoDraft: true, agentCovers: "any" });
+    const own = await prisma().agentCandidate.create({
+      data: candidateData(
+        posting,
+        {
+          score: 91,
+          reasons: ["Figma"],
+          redFlags: [],
+          meta: { review: "eligible", blockAutoDraft: false },
+          breakdown: { factors: [], cap: null, requirements: [{ text: "Figma", mustHave: true, covered: true, evidence: "Figma" }] },
+        },
+        "score-posting@3",
+        inputFingerprint,
+      ),
+    });
     await agentDraftJob.run({ candidateId: own.id, auto: true }, context());
-    // Kept with no requirements, so no coverage to tell (E32-2).
-    expect(emit).toHaveBeenCalledWith("draft.ready", { applicationId: expect.any(String), title: posting.title, company: "Ledgerly", coverage: null });
+    expect(emit).toHaveBeenCalledWith("draft.ready", { applicationId: expect.any(String), title: posting.title, company: "Ledgerly", coverage: { hit: 1, total: 1 } });
     vi.mocked(emit).mockClear();
     const asked = await candidate({ ...posting, externalId: "ledgerly-3", url: "https://jobs.example/ledgerly-3" });
     await agentDraftJob.run({ candidateId: asked.id, auto: false }, context());
     expect(emit).not.toHaveBeenCalled();
+  });
+
+  it("rechecks missing must-have coverage before an auto-draft starts", async () => {
+    const { agentDraftJob } = await import("./draft");
+    const [profile, config] = await Promise.all([loadScoringProfile(TEST_PROFILE_ID), loadScoringConfig()]);
+    const inputFingerprint = scoreInputFingerprint(profile, posting, config, new Date());
+    await saveSettings({ agentAutoDraft: true, agentCovers: "any" });
+    const own = await prisma().agentCandidate.create({
+      data: candidateData(
+        posting,
+        { score: 91, reasons: ["Figma"], redFlags: [], meta: { review: "eligible", blockAutoDraft: false } },
+        "score-posting@3",
+        inputFingerprint,
+      ),
+    });
+    await prisma().agentCandidate.update({ where: { id: own.id }, data: { requirements: 1, mustMissing: 1 } });
+
+    await expect(agentDraftJob.run({ candidateId: own.id, auto: true }, context())).rejects.toThrow("no longer meets the auto-draft settings");
+    expect(await prisma().application.count()).toBe(0);
+    expect(await prisma().agentCandidate.findUniqueOrThrow({ where: { id: own.id } })).toMatchObject({ status: "SCORED", error: expect.stringContaining("auto-draft settings") });
   });
 
   it("makes one application, however often it's asked", async () => {

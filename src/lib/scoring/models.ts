@@ -10,6 +10,7 @@ import { recordUsage } from "@/lib/usage-data";
 import { scorerKey, type ScoringConfig } from "./config";
 import type { FactorAnswers } from "./factors";
 import { askDecisions, scoreWithDecisions } from "./decisions";
+import { probeOpenRouterDecision, scoreWithOpenRouterDecisions } from "./openrouter-decisions";
 import { scoreWithJev } from "./jev";
 import { postingLines } from "./posting-lines";
 import type { ScoringPosting, ScoringProfile } from "./questions";
@@ -95,6 +96,17 @@ export const SCORING_MODELS: Record<Scorer, ScoringModel> = {
         { key: requireKey(config, "DECISIONS"), timeoutMs, retryDelaysMs: [] },
       );
       return { model };
+    },
+  },
+  OPENROUTER_DECISIONS: {
+    problem: async (config) => scorerKey(config, "OPENROUTER_DECISIONS").problem,
+    async load(config) {
+      const key = requireKey(config, "OPENROUTER_DECISIONS");
+      return (posting, profile, signal) => scoreWithOpenRouterDecisions(posting, profile, { key, model: config.openrouterModel, signal, onUsage: recordUsage });
+    },
+    async test(config, timeoutMs) {
+      const result = await probeOpenRouterDecision(requireKey(config, "OPENROUTER_DECISIONS"), config.openrouterModel, { timeoutMs });
+      return { model: result.model };
     },
   },
   OPENROUTER: {

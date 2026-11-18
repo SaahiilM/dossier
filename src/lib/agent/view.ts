@@ -6,6 +6,12 @@ import { loadJobSearchConfig } from "@/lib/job-search/config";
 import { postedAgo } from "@/lib/job-search/search";
 import { sourceInfo } from "@/lib/job-search/sources";
 import { prisma } from "@/lib/prisma";
+import { fitAutoDraftBlocked, parsePostingFitMeta, type PostingFit, type PostingFitMeta } from "@/lib/fit";
+import { bestProfileFor } from "@/lib/posting-scores";
+import { levelsProblem, profileIdOr } from "@/lib/profiles";
+import { loadScoringProfile } from "@/lib/scoring";
+import { loadScoringConfig } from "@/lib/scoring/config";
+import { postingFitFromCandidate } from "./candidates";
 import { loadSettings } from "@/lib/settings-data";
 import { lastKnownTimeZone } from "@/lib/time-zone";
 import { byBestFit, COVERS_LABELS, passes, type Covers, type Coverage } from "@/lib/posting-coverage";
@@ -40,6 +46,8 @@ export type AgentCandidateView = {
   coverage: Coverage;
   reasons: string[];
   redFlags: string[];
+  /** Why auto-draft did or would stop for this score. */
+  meta?: PostingFitMeta;
   /** Why the last try at a draft failed. */
   error: string | null;
   /** The draft, once there is one. */
@@ -92,6 +100,44 @@ export async function countAgentQueue(): Promise<number> {
   return prisma.agentCandidate.count({ where: { status: AgentCandidateStatus.DRAFTED, applicationId: { not: null } } });
 }
 
+/** Current freshness and eligibility of queued candidates, for connector status. */
+export async function agentQueueFitSummary(now = new Date()) {
+  const [settings, config, candidates] = await Promise.all([
+    loadSettings(),
+    loadScoringConfig(),
+    prisma.agentCandidate.findMany({
+      where: { status: { in: [AgentCandidateStatus.SCORED, AgentCandidateStatus.DRAFTING, AgentCandidateStatus.DRAFTED] }, skipReason: null },
+      include: {
+        searches: {
+          orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+          select: { search: { select: { profileId: true, allProfiles: true } } },
+        },
+      },
+    }),
+  ]);
+  const profiles = new Map<string, Awaited<ReturnType<typeof loadScoringProfile>> | null>();
+  let stale = 0;
+  let needsReview = 0;
+  let autoDraftBlocked = 0;
+  for (const row of candidates) {
+    const search = row.searches.find((link) => link.search)?.search;
+    const best = search?.allProfiles ? await bestProfileFor(row) : null;
+    const profileId = await profileIdOr(best ?? search?.profileId);
+    let profile = profiles.get(profileId);
+    if (profile === undefined) {
+      profile = (await levelsProblem(profileId)) ? null : await loadScoringProfile(profileId);
+      profiles.set(profileId, profile);
+    }
+    const fit: PostingFit = profile
+      ? postingFitFromCandidate(row, profile, config, now)
+      : { score: row.score, reasons: stringsOf(row.reasons), redFlags: stringsOf(row.redFlags), meta: parsePostingFitMeta(row.meta), stale: true };
+    if (fit.stale) stale += 1;
+    if (!fit.meta || fit.meta.review !== "eligible") needsReview += 1;
+    if (fitAutoDraftBlocked(fit) && row.requirements > 0 && passes(candidateCoverage(row), agentCoversOf(settings))) autoDraftBlocked += 1;
+  }
+  return { stale, needsReview, autoDraftBlocked };
+}
+
 /** "Today" and "Yesterday" in a sentence; "2 days ago" or "15 Oct" as they are. */
 const posted = (ago: string) => (ago === "Today" || ago === "Yesterday" ? ago.toLowerCase() : ago);
 
@@ -131,28 +177,32 @@ export async function loadAgentView(now = new Date()): Promise<AgentView> {
 
   const setupProblem = await agentSetupProblem();
 
-  const view = (candidate: (typeof candidates)[number]): AgentCandidateView => ({
-    searches: candidate.searches,
-    id: candidate.id,
-    title: candidate.title.trim() || "Untitled posting",
-    company: candidate.company.trim(),
-    facts: [candidate.place, candidate.remote ? "Remote" : "", candidate.salary].filter(Boolean).join(" · "),
-    origin: [
-      candidate.postedAt ? `Posted ${posted(postedAgo(candidate.postedAt.toISOString(), now))}` : "",
-      [candidate.via ? `via ${candidate.via}` : "", `on ${sourceInfo(candidate.source).name}`].filter(Boolean).join(" "),
-    ]
-      .filter(Boolean)
-      .join(" · "),
-    source: candidate.source,
-    url: candidate.url,
-    coverage: candidateCoverage(candidate),
-    reasons: stringsOf(candidate.reasons),
-    redFlags: stringsOf(candidate.redFlags),
-    error: candidate.error,
-    applicationId: candidate.applicationId,
-    draftJobId: draftJob.get(candidate.id) ?? null,
-    description: candidate.description,
-  });
+  const view = (candidate: (typeof candidates)[number]): AgentCandidateView => {
+    const meta = parsePostingFitMeta(candidate.meta);
+    return {
+      searches: candidate.searches,
+      id: candidate.id,
+      title: candidate.title.trim() || "Untitled posting",
+      company: candidate.company.trim(),
+      facts: [candidate.place, candidate.remote ? "Remote" : "", candidate.salary].filter(Boolean).join(" · "),
+      origin: [
+        candidate.postedAt ? `Posted ${posted(postedAgo(candidate.postedAt.toISOString(), now))}` : "",
+        [candidate.via ? `via ${candidate.via}` : "", `on ${sourceInfo(candidate.source).name}`].filter(Boolean).join(" "),
+      ]
+        .filter(Boolean)
+        .join(" · "),
+      source: candidate.source,
+      url: candidate.url,
+      coverage: candidateCoverage(candidate),
+      reasons: stringsOf(candidate.reasons),
+      redFlags: stringsOf(candidate.redFlags),
+      ...(meta ? { meta } : {}),
+      error: candidate.error,
+      applicationId: candidate.applicationId,
+      draftJobId: draftJob.get(candidate.id) ?? null,
+      description: candidate.description,
+    };
+  };
   const last = settings.agentRuns[0];
   const slots = planSlots(agentPlan(searches, config));
   // With nothing to run yet, whether a request to each portal would fit.

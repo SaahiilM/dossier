@@ -29,7 +29,7 @@ export function fitBand(score: number): string {
 /** A scoring model's answers, added up (E25-1), with the breakdown also as plain lines. */
 export function fitFromAnswers(answers: FactorAnswers): PostingFit {
   const { score, breakdown } = addUp(answers);
-  return { score, ...fitLines(breakdown), breakdown };
+  return { score, ...fitLines(breakdown), breakdown, meta: metaFromAnswers(answers) };
 }
 
 const MAX_REASONS = 4;
@@ -63,7 +63,7 @@ export const breakdownSchema = z.object({
 export const breakdownOf = (stored: unknown): Breakdown | null => breakdownSchema.nullable().catch(null).parse(stored ?? null);
 
 /** What scored it before the engine (E25): the AI model's score-posting@1 or @2, or Jev's first version. */
-export const isOlderScore = (scoredWith: string) => /^(score-posting@[12]|score-posting-jev@1)\b/.test(scoredWith);
+export const isOlderScore = (scoredWith: string) => /^(score-posting@[12]|score-posting-jev@1|score-posting-openrouter-decisions@[123])\b/.test(scoredWith);
 
 export type PostingFitReview = "eligible" | "ineligible" | "needs_review";
 
@@ -78,6 +78,21 @@ export const postingFitMetaSchema = z.object({
 });
 
 export type PostingFitMeta = z.infer<typeof postingFitMetaSchema>;
+
+/** Eligibility from the shared factor answers: any hard mismatch or uncertainty blocks agent auto-draft. */
+export function metaFromAnswers(answers: FactorAnswers): PostingFitMeta {
+  const issues: PostingFitIssue[] = [];
+  if (answers.requirements.some((requirement) => requirement.mustHave && !requirement.covered)) issues.push("missing_required");
+  if (answers.location.fit === "cannot") issues.push("location_permit");
+  if (answers.seniority.fit === "far-above" || answers.seniority.fit === "far-below") issues.push("seniority_gap");
+  if (answers.thin) issues.push("thin_posting");
+
+  const uncertain = answers.location.fit === "stretch" || answers.seniority.fit === "above" || answers.seniority.fit === "below";
+  if (uncertain) issues.push("uncertain");
+  const hardIssue = issues.some((issue) => issue !== "uncertain");
+  const review: PostingFitReview = hardIssue ? "ineligible" : uncertain ? "needs_review" : "eligible";
+  return { review, blockAutoDraft: review !== "eligible", ...(issues.length > 0 ? { issues } : {}) };
+}
 
 export function parsePostingFitMeta(value: unknown): PostingFitMeta | undefined {
   const parsed = postingFitMetaSchema.safeParse(value);
@@ -95,6 +110,8 @@ export function chatScoreMeta(answer: Pick<PostingFit, "redFlags" | "score">): P
 export function fitAutoDraftBlocked(fit: PostingFit): boolean {
   if (fit.stale) return true;
   if (!fit.meta) return true;
-  return fit.meta.blockAutoDraft;
+  if (fit.meta.blockAutoDraft || fit.meta.review !== "eligible") return true;
+  if (fit.breakdown?.cap) return true;
+  return Boolean(fit.breakdown?.requirements.some((requirement) => requirement.mustHave && !requirement.covered));
 }
 

@@ -7,8 +7,10 @@ import { foundPostingSchema, postingKey, type FoundPosting } from "@/lib/job-sea
 import { saveScore } from "@/lib/posting-scores";
 import { postingStates } from "@/lib/postings";
 import { levelsProblem, listProfiles } from "@/lib/profiles";
-import { breakdownSchema } from "@/lib/fit";
+import { breakdownSchema, postingFitMetaSchema } from "@/lib/fit";
 import { loadPostingScorer, loadScoringProfile } from "@/lib/scoring";
+import { loadScoringConfig } from "@/lib/scoring/config";
+import { scoreInputFingerprint } from "@/lib/scoring/fingerprint";
 
 import { defineJob } from "./runner";
 
@@ -16,7 +18,7 @@ import { defineJob } from "./runner";
 export const scoreJobKey = (posting: Pick<FoundPosting, "source" | "externalId">) => `posting-score:${postingKey(posting)}`;
 
 /** What a score job gives: the score, why, and how it adds up (E25-6). */
-const fitResult = z.object({ score: z.number().int(), reasons: z.array(z.string()), redFlags: z.array(z.string()), breakdown: breakdownSchema.nullable().optional() });
+const fitResult = z.object({ score: z.number().int(), reasons: z.array(z.string()), redFlags: z.array(z.string()), meta: postingFitMetaSchema.optional(), breakdown: breakdownSchema.nullable().optional() });
 const profileFitResult = fitResult.extend({ profileId: z.string(), profileName: z.string(), older: z.boolean().optional() });
 
 /** Which profiles Score asks for (E25-5): one, or all of them; the first when it says none. */
@@ -45,12 +47,15 @@ export const scorePostingJob = defineJob({
     const ready = asked === "all" ? (await Promise.all(chosen.map(async (profile) => ((await levelsProblem(profile.id)) ? [] : [profile])))).flat() : chosen;
     // None ready: say why, for the first.
     const scoring = ready.length > 0 ? ready : chosen.slice(0, 1);
-    const score = await loadPostingScorer();
+    const config = await loadScoringConfig();
+    const score = await loadPostingScorer(config);
+    const referenceDate = new Date();
     for (const { id, name } of scoring) {
       await step(all.length > 1 ? `Scoring it against “${name}”` : "Scoring it against your profile");
       const profile = await loadScoringProfile(id);
-      const { data, scoredWith } = await score({ ...posting, description }, profile, signal);
-      await saveScore(posting, data, scoredWith, id);
+      const full = { ...posting, description };
+      const { data, scoredWith } = await score(full, profile, signal);
+      await saveScore(posting, data, scoredWith, id, scoreInputFingerprint(profile, full, config, referenceDate));
     }
     const state = (await postingStates([posting])).get(postingKey(posting));
     return { score: state?.score ?? null, scores: state?.scores ?? [] };
@@ -80,7 +85,7 @@ export const scorePastedPostingJob = defineJob({
     // Its levels first: scoring waits until they're chosen (E24-3, M5a).
     const profile = await loadScoringProfile(profileId);
     const score = await loadPostingScorer();
-    const remote = /\b(remote|home ?office|hybrid)\b/i.test(mode) ? true : null;
+    const remote = /\b(remote|home ?office)\b/i.test(mode) && !/\bhybrid\b/i.test(mode) ? true : null;
     const { data } = await score({ title, company, place: location, remote, salary, description: posting }, profile, signal);
     return data;
   },

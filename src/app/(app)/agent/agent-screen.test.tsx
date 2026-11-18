@@ -127,6 +127,11 @@ describe("AgentScreen (E16-6)", () => {
     expect(screen.getByRole("region", { name: "How it fits" })).toHaveTextContent("Not scored");
   });
 
+  it("shows why an auto-draft was held for a score that needs review", () => {
+    open({ finds: [card("f1", 80, { meta: { review: "needs_review", blockAutoDraft: true, issues: ["uncertain"] } })] }, "finds");
+    expect(screen.getByRole("note")).toHaveTextContent("This score needs a closer look. The job agent won’t prepare a draft on its own.");
+  });
+
   it("lists drafts to review, resume and letter ready, with Review draft, Approve and Dismiss", async () => {
     const user = userEvent.setup();
     open();

@@ -7,10 +7,6 @@ import { SCORER_USAGE } from "@/lib/scoring/scorers";
 /** Everything that asks the AI model, or Jev, for an answer, in the order the screen lists them at rest. */
 export const USAGE_TASKS = [
   { task: "extract-profile", label: "Importing a profile", hint: "A resume read into your profile" },
-  { task: "score-posting", label: "Scoring postings", hint: "Score in Find jobs, and the job agent" },
-  { task: "score-posting-jev", label: "Scoring postings with Jev", hint: "The same, by TypeSafe's Jev" },
-  { task: "score-posting-openrouter", label: "Scoring postings with an OpenRouter chat model", hint: "The same, by your OpenRouter chat model" },
-  { task: "score-posting-openrouter-decisions", label: "Scoring postings with an OpenRouter decision model", hint: "The same questions as Jev, answered by the decision model" },
   { task: "guess-levels", label: "Guessing levels", hint: "Guess with AI on a profile's levels" },
   // One row per scoring model (E25-2).
   ...SCORER_USAGE,

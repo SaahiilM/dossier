@@ -6,6 +6,9 @@ import { DEFAULT_FILTERS, FOUND_BY_AGENT, type FoundPosting, type SearchQuery } 
 import type { JobContext } from "@/lib/jobs/runner";
 import { sweepFinishedJobs } from "@/lib/jobs/retention";
 import { encryptSecret, TYPESAFE_KEY } from "@/lib/secrets";
+import { loadScoringConfig } from "@/lib/scoring/config";
+import { scoreInputFingerprint } from "@/lib/scoring/fingerprint";
+import { loadScoringProfile } from "@/lib/scoring";
 import { saveSettings, loadSettings } from "@/lib/settings-data";
 import { loadProfile } from "@/lib/profile-data";
 import { createTestClient, resetDatabase, TEST_PROFILE_ID } from "@/test/db";
@@ -55,6 +58,7 @@ const fake = vi.hoisted(() => ({
   /** More portals switched on, after `source` (E22-8). */
   extra: [] as ("JSEARCH" | "ADZUNA" | "FREEHIRE" | "ARBEITSAGENTUR")[],
   ai: true,
+  missingRequired: false,
   failOn: null as string | null,
   onScore: (() => {}) as (title: string) => void,
 }));
@@ -87,7 +91,9 @@ vi.mock("@/lib/ai", async (importOriginal) => ({
         fake.onScore(title);
         if (title === fake.failOn) return "not json at all";
         // 100, 71 or 8 (E25).
-        return factorsAnswer(call, /senior/i.test(title) ? "high" : /designer/i.test(title) ? "mid" : "low");
+        const answer = factorsAnswer(call, /senior/i.test(title) ? "high" : /designer/i.test(title) ? "mid" : "low");
+        if (fake.missingRequired && answer.requirements[0]) answer.requirements[0].covered = false;
+        return answer;
       },
     }),
 }));
@@ -126,7 +132,7 @@ const context = (abort?: AbortController): JobContext & { steps: string[] } => {
 
 beforeEach(async () => {
   await resetDatabase(prisma());
-  Object.assign(fake, { postings: page, searches: 0, source: "JSEARCH", extra: [], ai: true, failOn: null, onScore: () => {} });
+  Object.assign(fake, { postings: page, searches: 0, source: "JSEARCH", extra: [], ai: true, missingRequired: false, failOn: null, onScore: () => {} });
   await saveSettings({ agentEnabled: true });
   await prisma().agentSearch.create({ data: { name: "My search", query } });
 });
@@ -556,6 +562,21 @@ describe("runAgentScan (E16-3)", () => {
     expect(startJob).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ type: "agent-draft" }), { candidateId: best.id, auto: true }, { key: `agent-candidate:${best.id}` });
   });
 
+  it("holds auto-draft when a required posting line is missing, even when the coverage cut-off is Any", async () => {
+    const { startJob } = await import("@/lib/jobs/runner");
+    vi.mocked(startJob).mockClear();
+    fake.postings = [page[0]];
+    fake.missingRequired = true;
+    await saveSettings({ agentAutoDraft: true, agentMaxDrafts: 1, agentCovers: "any" });
+    const result = await runAgentScan({ manual: true }, context(), now);
+    expect(result).toMatchObject({ scored: 1, drafted: 0 });
+    expect(startJob).not.toHaveBeenCalled();
+    const candidate = await prisma().agentCandidate.findFirstOrThrow();
+    expect(candidate.meta).toMatchObject({ review: "ineligible", blockAutoDraft: true, issues: ["missing_required"] });
+    expect(candidate.inputFingerprint).toMatch(/^[a-f0-9]{16}$/);
+    expect(candidate.scoredWith).toBe("score-posting@3");
+  });
+
   it("says when nothing covers enough of the requirements (E32-2)", async () => {
     fake.postings = [page[2]];
     expect((await runAgentScan({ manual: false }, context(), now)).message).toBe("Scored 1 new posting; none covers at least two thirds of the requirements.");
@@ -610,8 +631,10 @@ describe("the agent on many portals (E22-8)", () => {
     expect(fourth.message).toContain("The agent needs 1 request to JSearch and 1 request to FreeHire this run");
   });
 
-  it("keeps a score from Positions instead of asking the AI again", async () => {
-    await prisma().postingScore.create({ data: { source: "JSEARCH", externalId: "b", profileId: TEST_PROFILE_ID, score: 66, reasons: ["Scored by hand."], redFlags: [], scoredWith: "test" } });
+  it("reuses a score from Positions while its inputs are current", async () => {
+    const [profile, config] = await Promise.all([loadScoringProfile(TEST_PROFILE_ID), loadScoringConfig()]);
+    const inputFingerprint = scoreInputFingerprint(profile, page[1], config, new Date());
+    await prisma().postingScore.create({ data: { source: "JSEARCH", externalId: "b", profileId: TEST_PROFILE_ID, score: 66, reasons: ["Scored by hand."], redFlags: [], scoredWith: "test", inputFingerprint } });
     const scored: string[] = [];
     fake.onScore = (title) => void scored.push(title);
     await saveSettings({ agentMaxScores: 1 });

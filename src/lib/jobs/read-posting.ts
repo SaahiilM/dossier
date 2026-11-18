@@ -6,18 +6,28 @@ import { getAiProvider } from "@/lib/ai";
 import { loadTaskOptions } from "@/lib/ai/task-options";
 import { extractPosting } from "@/lib/ai/tasks";
 import { extractedSchema, matchFromRequirements, matchSchema } from "@/lib/application-data";
-import { breakdownOf, breakdownSchema, type PostingFit } from "@/lib/fit";
+import { breakdownOf, breakdownSchema, parsePostingFitMeta, postingFitMetaSchema, type PostingFit } from "@/lib/fit";
 import { stringsOf } from "@/lib/agent/candidates";
 import { saveScore } from "@/lib/posting-scores";
 import { prisma } from "@/lib/prisma";
 import { levelsProblem, profileIdOr } from "@/lib/profiles";
 import { loadPostingScorer, loadScoringProfile } from "@/lib/scoring";
+import { loadScoringConfig } from "@/lib/scoring/config";
+import { scoreInputFingerprint } from "@/lib/scoring/fingerprint";
 
 import { READ_POSTING_STEPS } from "./application-steps";
 import { defineJob } from "./runner";
 
 /** A posting's score as the reading gives it: with its breakdown, whose requirements are How you match. */
-const fitSchema = z.object({ score: z.number().int(), reasons: z.array(z.string()), redFlags: z.array(z.string()), breakdown: breakdownSchema.nullable().optional() });
+const fitSchema = z.object({
+  score: z.number().int(),
+  reasons: z.array(z.string()),
+  redFlags: z.array(z.string()),
+  breakdown: breakdownSchema.nullable().optional(),
+  meta: postingFitMetaSchema.optional(),
+  scoredWith: z.string().optional(),
+  stale: z.boolean().optional(),
+});
 
 /**
  * Reads a pasted posting and compares it with one profile (E7-2, NEW-2,
@@ -59,7 +69,7 @@ export const readPostingJob = defineJob({
     await step(READ_POSTING_STEPS[2]);
     const kept = scored ? await prisma.postingScore.findUnique({ where: { source_externalId_profileId: { ...scored, profileId } } }) : null;
     const keptBreakdown = kept ? breakdownOf(kept.breakdown) : null;
-    const waiting = kept && keptBreakdown ? null : await levelsProblem(profileId);
+    const waiting = await levelsProblem(profileId);
     if (waiting) {
       return {
         extracted: extraction.data,
@@ -69,21 +79,29 @@ export const readPostingJob = defineJob({
         scoreWaits: { message: `${waiting.message} Choose them in Profile → Jobs it's for.`, href: waiting.href },
       };
     }
+    const [profile, config] = await Promise.all([loadScoringProfile(profileId), loadScoringConfig()]);
+    const extracted = extraction.data;
+    const remote = /\b(remote|home ?office)\b/i.test(extracted.mode ?? "") && !/\bhybrid\b/i.test(extracted.mode ?? "") ? true : null;
+    const scoringInput = {
+      title: extracted.title ?? extracted.role ?? "",
+      company: extracted.company ?? "",
+      place: extracted.location ?? "",
+      remote,
+      salary: extracted.salary ?? "",
+      description: posting,
+    };
+    const inputFingerprint = scoreInputFingerprint(profile, scoringInput, config, new Date());
+    const keptMeta = kept ? parsePostingFitMeta(kept.meta) : undefined;
+    const reusable = Boolean(kept && keptBreakdown && keptMeta && kept.inputFingerprint === inputFingerprint);
     let fit: PostingFit;
     let scoredWith: string;
-    if (kept && keptBreakdown) {
-      fit = { score: kept.score, reasons: stringsOf(kept.reasons), redFlags: stringsOf(kept.redFlags), breakdown: keptBreakdown };
+    if (reusable && kept && keptBreakdown && keptMeta) {
+      fit = { score: kept.score, reasons: stringsOf(kept.reasons), redFlags: stringsOf(kept.redFlags), breakdown: keptBreakdown, meta: keptMeta, scoredWith: kept.scoredWith };
       scoredWith = kept.scoredWith;
     } else {
-      const [score, profile] = await Promise.all([loadPostingScorer(), loadScoringProfile(profileId)]);
-      const extracted = extraction.data;
-      const remote = /\b(remote|home ?office)\b/i.test(extracted.mode ?? "") ? true : null;
-      ({ data: fit, scoredWith } = await score(
-        { title: extracted.title ?? extracted.role ?? "", company: extracted.company ?? "", place: extracted.location ?? "", remote, salary: extracted.salary ?? "", description: posting },
-        profile,
-        signal,
-      ));
-      if (scored) await saveScore(scored, fit, scoredWith, profileId);
+      const score = await loadPostingScorer(config);
+      ({ data: fit, scoredWith } = await score(scoringInput, profile, signal));
+      if (scored) await saveScore(scored, fit, scoredWith, profileId, inputFingerprint);
     }
 
     return {

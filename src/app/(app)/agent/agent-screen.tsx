@@ -350,6 +350,13 @@ function AgentPreview({
           The last try at a draft didn&apos;t work: {candidate.error}
         </p>
       )}
+      {candidate.meta?.blockAutoDraft && (
+        <p role="note" className="rounded-card bg-warning-surface px-4 py-3 text-meta text-warning">
+          {candidate.meta.review === "ineligible"
+            ? "This score found a mismatch or missing requirement. The job agent won’t prepare a draft on its own."
+            : "This score needs a closer look. The job agent won’t prepare a draft on its own."}
+        </p>
+      )}
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
         <PreviewCard label="How it fits">
           <div className="flex items-center gap-3.5">

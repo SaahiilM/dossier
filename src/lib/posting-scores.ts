@@ -9,10 +9,24 @@ import { prisma } from "@/lib/prisma";
 // Scores kept per posting and profile (#208, E25-5): from Score in Positions, or the job agent.
 
 /** Keeps a posting's score, replacing an older one. */
-export async function saveScore(posting: Pick<FoundPosting, "source" | "externalId">, fit: PostingFit, scoredWith: string, profileId: string): Promise<void> {
+export async function saveScore(
+  posting: Pick<FoundPosting, "source" | "externalId">,
+  fit: PostingFit,
+  scoredWith: string,
+  profileId: string,
+  inputFingerprint: string | null = null,
+): Promise<void> {
   const where = { source_externalId_profileId: { source: posting.source, externalId: posting.externalId, profileId } };
-  // A score without a breakdown (one written in Claude chat) clears the one before.
-  const data = { score: fit.score, reasons: fit.reasons, redFlags: fit.redFlags, breakdown: fit.breakdown ?? Prisma.DbNull, scoredWith };
+  // A score without a breakdown or structured eligibility (one written in Claude chat) clears the old engine data.
+  const data = {
+    score: fit.score,
+    reasons: fit.reasons,
+    redFlags: fit.redFlags,
+    meta: fit.meta ? (fit.meta as Prisma.InputJsonValue) : Prisma.DbNull,
+    inputFingerprint,
+    breakdown: fit.breakdown ? (fit.breakdown as Prisma.InputJsonValue) : Prisma.DbNull,
+    scoredWith,
+  };
   await prisma.postingScore.upsert({ where, create: { source: posting.source, externalId: posting.externalId, profileId, ...data }, update: data });
 }
 

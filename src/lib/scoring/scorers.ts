@@ -2,7 +2,7 @@
 // Settings → Scoring, the setup guide and the Usage screen alike. The server
 // side of each (how it scores, how it's tested) is in src/lib/scoring/models.ts.
 
-export const SCORERS = ["AI", "JEV", "DECISIONS", "OPENROUTER"] as const;
+export const SCORERS = ["AI", "JEV", "DECISIONS", "OPENROUTER_DECISIONS", "OPENROUTER"] as const;
 export type Scorer = (typeof SCORERS)[number];
 
 /** Each scoring model's row on the Usage screen (#290), in this order there. */
@@ -10,12 +10,15 @@ export const SCORER_USAGE = [
   { task: "score-posting", label: "Scoring postings", hint: "Score in Positions and the job agent, with your AI model" },
   { task: "score-posting-jev", label: "Scoring postings with Jev", hint: "The same, by TypeSafe's Jev" },
   { task: "score-posting-decisions", label: "Scoring postings with OpenAI Decisions", hint: "The same, by OpenAI Decisions" },
+  { task: "score-posting-openrouter-decisions", label: "Scoring postings with OpenRouter Decisions", hint: "The same questions, by an OpenRouter decision model" },
   { task: "score-posting-openrouter", label: "Scoring postings with OpenRouter", hint: "The same, by a model on OpenRouter" },
 ] as const;
 type UsageRow = (typeof SCORER_USAGE)[number];
 
 /** The OpenRouter model that scores until another is chosen (E25-4): cheap, and it holds answers to a JSON schema. */
 export const OPENROUTER_SCORING_MODEL = "openai/gpt-6-luna";
+/** The legacy decision scorer's default free model, retained as a distinct choice from OpenRouter chat scoring. */
+export const OPENROUTER_DECISION_MODEL = "perplexity/pplx-decider-v1.3:free";
 
 /** Like the job sources' keys: saved here, from an environment variable, missing, or saved under another DOSSIER_SECRET. */
 export type ScoringKeyState = "none" | "set" | "unreadable" | "env";
@@ -101,11 +104,29 @@ export const SCORER_INFO: Record<Scorer, ScorerInfo> = {
       wikiAnchor: "scoring-with-openai-decisions",
     },
   },
+  OPENROUTER_DECISIONS: {
+    name: "OpenRouter Decisions",
+    description: "A free OpenRouter decision model answers the scoring questions. Dossier builds the score from those answers and the posting's own lines, using the same factors as the other scorers.",
+    tag: `Default ${OPENROUTER_DECISION_MODEL}`,
+    usage: SCORER_USAGE[3],
+    key: { label: "OpenRouter key", setting: "openrouterScoringKeyEnc", envName: null, getKey: { href: "https://openrouter.ai/settings/keys", text: "OpenRouter's keys page" } },
+    privacy: `Each posting you score goes to OpenRouter and the company behind the model you chose, ${PROFILE_SENT}. Check both providers' data policies before choosing a model.`,
+    testing: "Asking the decision model one short question…",
+    setup: {
+      cost: "The default model is free. Other decision models may have a price; Dossier only accepts the selected model when OpenRouter confirms it is free.",
+      data: `Each posting you score goes to OpenRouter and the decision model's provider ${PROFILE_SENT}. Review their data retention and training policies before choosing a model.`,
+      steps: [
+        { text: "Sign in to OpenRouter and add credits if you choose a paid model.", link: { href: "https://openrouter.ai", label: "OpenRouter" } },
+        { text: "Create a key, and paste it below.", link: { href: "https://openrouter.ai/settings/keys", label: "OpenRouter's keys page" } },
+      ],
+      wikiAnchor: "scoring-with-openrouter-decisions",
+    },
+  },
   OPENROUTER: {
     name: "OpenRouter",
     description: "A model of your choice on OpenRouter answers the scoring questions and says why, apart from the AI that writes your documents.",
     tag: "Needs an OpenRouter key",
-    usage: SCORER_USAGE[3],
+    usage: SCORER_USAGE[4],
     key: { label: "OpenRouter key", setting: "openrouterScoringKeyEnc", envName: null, getKey: { href: "https://openrouter.ai/settings/keys", text: "OpenRouter's keys page" } },
     privacy: `Each posting you score goes to OpenRouter and the company behind the model you chose, ${PROFILE_SENT}. Dossier asks OpenRouter to use only companies that don't keep or train on it.`,
     testing: "Asking the model on OpenRouter for one word…",
@@ -122,10 +143,18 @@ export const SCORER_INFO: Record<Scorer, ScorerInfo> = {
 };
 
 /** The settings that hold scoring models' keys: never exported, and kept on import. */
-export const SCORER_KEY_SETTINGS: readonly string[] = SCORERS.flatMap((scorer) => SCORER_INFO[scorer].key?.setting ?? []);
+export const SCORER_KEY_SETTINGS: readonly string[] = [
+  ...new Set([...SCORERS.flatMap((scorer) => SCORER_INFO[scorer].key?.setting ?? []), "openRouterScoringKeyEnc"]),
+];
 
 /** What Settings → Scoring shows: the choice, each key's state (never a key) and OpenRouter's model. */
 export type ScoringView = { scorer: Scorer; keys: Partial<Record<Scorer, ScoringKeyState>>; openrouterModel: string };
 
 export const scorerKeyMissing = (scorer: Scorer) => `Enter your ${SCORER_INFO[scorer].key?.label ?? "key"} in Settings → Scoring first.`;
 export const scorerKeyUnreadable = (scorer: Scorer) => `Your saved ${SCORER_INFO[scorer].key?.label ?? "key"} can't be read. Enter it again in Settings → Scoring.`;
+
+/** When the user switches to Decisions, use its known free default unless a free model was already saved. */
+export function decisionModelOnSelect(current: string | null, scorer: Scorer): string | undefined {
+  if (scorer !== "OPENROUTER_DECISIONS") return undefined;
+  return current?.trim().endsWith(":free") ? undefined : OPENROUTER_DECISION_MODEL;
+}

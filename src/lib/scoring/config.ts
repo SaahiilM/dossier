@@ -5,14 +5,19 @@ import { DECISIONS_KEY, decryptSecret, OPENROUTER_SCORING_KEY, SecretUnreadable,
 import type { SettingsData } from "@/lib/settings";
 import { loadSettings } from "@/lib/settings-data";
 
-import { OPENROUTER_SCORING_MODEL, SCORER_INFO, SCORERS, scorerKeyMissing, scorerKeyUnreadable, type Scorer, type ScoringKeyState, type ScoringView } from "./scorers";
+import { OPENROUTER_DECISION_MODEL, OPENROUTER_SCORING_MODEL, SCORER_INFO, SCORERS, scorerKeyMissing, scorerKeyUnreadable, type Scorer, type ScoringKeyState, type ScoringView } from "./scorers";
 
 // Which scoring model scores postings (#274, E25-2): the choice saved in
 // Settings → Scoring, or else DOSSIER_SCORER, or else the AI model; and each
 // model's key, saved there (encrypted for it only) or in its variable.
 
 /** What each key is encrypted for, so a key saved for one can't be read as another's. */
-export const SCORER_KEY_CONTEXT: Partial<Record<Scorer, SecretKind>> = { JEV: TYPESAFE_KEY, DECISIONS: DECISIONS_KEY, OPENROUTER: OPENROUTER_SCORING_KEY };
+export const SCORER_KEY_CONTEXT: Partial<Record<Scorer, SecretKind>> = {
+  JEV: TYPESAFE_KEY,
+  DECISIONS: DECISIONS_KEY,
+  OPENROUTER_DECISIONS: OPENROUTER_SCORING_KEY,
+  OPENROUTER: OPENROUTER_SCORING_KEY,
+};
 
 type ScorerKeyConfig = { key: string | null; keyState: ScoringKeyState };
 
@@ -26,9 +31,15 @@ export type ScoringConfig = {
   openrouterModel: string;
 };
 
-const FROM_ENV: Record<NonNullable<Env["DOSSIER_SCORER"]>, Scorer> = { ai: "AI", jev: "JEV", "openai-decisions": "DECISIONS", openrouter: "OPENROUTER" };
+const FROM_ENV: Record<NonNullable<Env["DOSSIER_SCORER"]>, Scorer> = {
+  ai: "AI",
+  jev: "JEV",
+  "openai-decisions": "DECISIONS",
+  "openrouter-decisions": "OPENROUTER_DECISIONS",
+  openrouter: "OPENROUTER",
+};
 
-type SavedKeys = Pick<SettingsData, "scorer" | "typesafeKeyEnc"> & Partial<Pick<SettingsData, "decisionsKeyEnc" | "openrouterScoringKeyEnc" | "openrouterScoringModel">>;
+type SavedKeys = Pick<SettingsData, "scorer" | "typesafeKeyEnc"> & Partial<Pick<SettingsData, "decisionsKeyEnc" | "openrouterScoringKeyEnc" | "openrouterScoringModel" | "openRouterScoringKeyEnc" | "openRouterScoringModel">>;
 type KeyEnv = Pick<Env, "DOSSIER_SCORER" | "DOSSIER_TYPESAFE_KEY">;
 
 export function resolveScoringConfig(saved: SavedKeys, source: KeyEnv, secret?: string): ScoringConfig {
@@ -37,7 +48,10 @@ export function resolveScoringConfig(saved: SavedKeys, source: KeyEnv, secret?: 
   for (const id of SCORERS) {
     const info = SCORER_INFO[id].key;
     if (!info) continue;
-    const stored = saved[info.setting];
+    // The upper-cased field names are the prior fork's encrypted settings.
+    // Read them only as a compatibility fallback; new saves use the upstream
+    // per-scorer settings and the same dedicated encryption context.
+    const stored = saved[info.setting] || (id === "OPENROUTER" || id === "OPENROUTER_DECISIONS" ? saved.openRouterScoringKeyEnc : null);
     if (stored) {
       try {
         keys[id] = { key: decryptSecret(SCORER_KEY_CONTEXT[id]!, stored, secret), keyState: "set" };
@@ -50,7 +64,9 @@ export function resolveScoringConfig(saved: SavedKeys, source: KeyEnv, secret?: 
     const fromEnv = info.envName ? source[info.envName] : undefined;
     keys[id] = fromEnv ? { key: fromEnv, keyState: "env" } : { key: null, keyState: "none" };
   }
-  return { scorer, saved: saved.scorer !== null, keys, openrouterModel: saved.openrouterScoringModel ?? OPENROUTER_SCORING_MODEL };
+  const decisionModel = saved.openRouterScoringModel ?? OPENROUTER_DECISION_MODEL;
+  const chatModel = saved.openrouterScoringModel ?? OPENROUTER_SCORING_MODEL;
+  return { scorer, saved: saved.scorer !== null, keys, openrouterModel: scorer === "OPENROUTER_DECISIONS" ? decisionModel : chatModel };
 }
 
 /** The scoring configuration in effect right now. */

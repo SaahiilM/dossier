@@ -13,11 +13,13 @@ const live = process.env.OPENROUTER_DECISIONS_LIVE === "check";
 describe.skipIf(!live)("OpenRouter decision connection", () => {
   it("gets an answer from the free decision model", async () => {
     process.loadEnvFile(".env");
-    const { openRouterDecisionTarget, loadScoringConfig } = await import("./config");
+    const { loadScoringConfig, scorerKey } = await import("./config");
     const { probeOpenRouterDecision } = await import("./openrouter-decisions");
-    const decision = openRouterDecisionTarget(await loadScoringConfig());
+    const config = await loadScoringConfig();
+    const decision = scorerKey(config, "OPENROUTER_DECISIONS");
     if (decision.problem !== null) throw new Error(decision.problem);
-    const result = await probeOpenRouterDecision(decision.key, decision.model || OPENROUTER_DECISION_MODEL, { timeoutMs: 60_000 });
+    const model = config.scorer === "OPENROUTER_DECISIONS" ? config.openrouterModel : OPENROUTER_DECISION_MODEL;
+    const result = await probeOpenRouterDecision(decision.key, model, { timeoutMs: 60_000 });
     expect(result.model.length).toBeGreaterThan(0);
     expect(result.usage.costUsd === null || result.usage.costUsd === 0).toBe(true);
     expect(result.answers.ready?.type).toBe("noul");

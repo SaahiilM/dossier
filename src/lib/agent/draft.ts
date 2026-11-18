@@ -8,6 +8,7 @@ import { ActionError } from "@/lib/action";
 import { AiError } from "@/lib/ai/errors";
 import { createApplicationFromDocuments, type ApplicationDetails } from "@/lib/application-create";
 import type { Extracted } from "@/lib/application-data";
+import { fitAutoDraftBlocked } from "@/lib/fit";
 import { fullText } from "@/lib/job-search/find";
 import { postingText, type FoundPosting } from "@/lib/job-search/search";
 import { readPostingJob } from "@/lib/jobs/read-posting";
@@ -17,10 +18,14 @@ import { logServerError } from "@/lib/log";
 import { dismissPosting, storePosting, unmarkPosting } from "@/lib/postings";
 import { prisma } from "@/lib/prisma";
 import { emit } from "@/lib/notifications/notify";
-import { profileIdOr } from "@/lib/profiles";
+import { agentCoversOf } from "@/lib/settings";
+import { passes } from "@/lib/posting-coverage";
+import { levelsProblem, profileIdOr } from "@/lib/profiles";
+import { loadScoringConfig } from "@/lib/scoring/config";
+import { loadScoringProfile } from "@/lib/scoring";
 import { loadSettings } from "@/lib/settings-data";
 
-import { DISMISSED_TRIM } from "./candidates";
+import { candidateCoverage, DISMISSED_TRIM, postingFitFromCandidate } from "./candidates";
 import { lockAgentSearches } from "./searches";
 import { bestProfileFor } from "@/lib/posting-scores";
 
@@ -67,10 +72,31 @@ function detailsFrom(extracted: Extracted): ApplicationDetails {
  * retry, a second click and auto-draft can't make two applications; a failure
  * sends it back to SCORED with the error to show. Returns the application.
  */
-export async function draftCandidate(candidateId: string, context: JobContext): Promise<string> {
+export async function draftCandidate(candidateId: string, context: JobContext, { auto = false }: { auto?: boolean } = {}): Promise<string> {
   const candidate = await prisma.agentCandidate.findUnique({ where: { id: candidateId } });
   if (!candidate) throw new ActionError("That posting is no longer in the agent's queue.");
   if (candidate.status === AgentCandidateStatus.DRAFTED && candidate.applicationId) return candidate.applicationId;
+  const foundBy = await prisma.agentCandidateSearch.findFirst({
+    where: { candidateId, search: { isNot: null } },
+    orderBy: { createdAt: "asc" },
+    select: { search: { select: { profileId: true, allProfiles: true } } },
+  });
+  const best = foundBy?.search?.allProfiles ? await bestProfileFor(candidate) : null;
+  const profileId = await profileIdOr(best ?? foundBy?.search?.profileId);
+  if (auto) {
+    const settings = await loadSettings();
+    const coverage = candidateCoverage(candidate);
+    const message = "The job agent held this draft because the score is out of date, needs review, or no longer meets the auto-draft settings.";
+    const holdAutoDraft = async () => {
+      await prisma.agentCandidate.updateMany({ where: { id: candidateId, status: AgentCandidateStatus.SCORED }, data: { error: message } });
+      throw new ActionError(message);
+    };
+    if (!settings.agentAutoDraft || candidate.requirements === 0 || candidate.mustMissing > 0 || !passes(coverage, agentCoversOf(settings))) await holdAutoDraft();
+    if (await levelsProblem(profileId)) await holdAutoDraft();
+    const [profile, config] = await Promise.all([loadScoringProfile(profileId), loadScoringConfig()]);
+    const fit = postingFitFromCandidate(candidate, profile, config, new Date());
+    if (fitAutoDraftBlocked(fit)) await holdAutoDraft();
+  }
   const { count } = await prisma.agentCandidate.updateMany({
     where: { id: candidateId, status: AgentCandidateStatus.SCORED },
     data: { status: AgentCandidateStatus.DRAFTING, error: null },
@@ -84,15 +110,6 @@ export async function draftCandidate(candidateId: string, context: JobContext): 
     const description = (await fullText(found)) ?? candidate.description;
     if (!description.trim()) throw new ActionError("That posting has no text to write from. Open it and start an application by hand.");
     const posting = postingText({ ...found, description });
-
-    // Written from the profile of the search that found it first (E24-6), or the one that scored it best when that search scores against all (E25-5); the first profile's when that search is gone.
-    const foundBy = await prisma.agentCandidateSearch.findFirst({
-      where: { candidateId, search: { isNot: null } },
-      orderBy: { createdAt: "asc" },
-      select: { search: { select: { profileId: true, allProfiles: true } } },
-    });
-    const best = foundBy?.search?.allProfiles ? await bestProfileFor(candidate) : null;
-    const profileId = await profileIdOr(best ?? foundBy?.search?.profileId);
 
     await context.step(`Reading the posting from ${name}`);
     // Its score for that profile, when the agent kept one, answers How you match with no new call (E25-7).
@@ -141,7 +158,7 @@ export const agentDraftJob = defineJob({
   }),
   result: z.object({ applicationId: z.string().min(1) }),
   run: async ({ candidateId, auto }, context) => {
-    const applicationId = await draftCandidate(candidateId, context);
+    const applicationId = await draftCandidate(candidateId, context, { auto });
     if (auto) {
       const candidate = await prisma.agentCandidate.findUnique({ where: { id: candidateId }, select: { title: true, company: true, covered: true, requirements: true } });
       if (candidate) {
