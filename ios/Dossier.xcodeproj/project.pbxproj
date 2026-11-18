@@ -14,11 +14,14 @@
 		487180FFDEEB59807C8D9944 /* WorkspaceViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E7D6D2D13F7D86008535F45 /* WorkspaceViews.swift */; };
 		4D7FAA595C9E2AAAEC089D54 /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B87E6FE7674561D8755E9EFF /* AppModel.swift */; };
 		5E42931E72BB40A30A345D8C /* DossierShareExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 9049D85DC6C59DB478DC0A91 /* DossierShareExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		6B3997F26AEC35F7109CD4CF /* ApplicationDocumentsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 05D4D82ADC75C9B9838C8977 /* ApplicationDocumentsView.swift */; };
 		716130D556B8BDB23CC52C12 /* LocalCacheStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F45653CB8287D52B6A13C8F /* LocalCacheStore.swift */; };
 		76437DBF529263F2D2756B4F /* ApplicationDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D2A992CA8FE18192BCB07CE /* ApplicationDetailView.swift */; };
 		7EF983EA49ADCCEB07E4ADBC /* EventKitUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 246FE746EBE785F4BB617F76 /* EventKitUI.framework */; };
 		9AE7053BD0908614E7659E85 /* libsqlite3.tbd in Frameworks */ = {isa = PBXBuildFile; fileRef = 4FA897F28AAE872988CB81F7 /* libsqlite3.tbd */; };
+		A1048B094FD2CCCE558D5E5E /* MobileDocuments.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFADD8DD69C633C08E1FB2C1 /* MobileDocuments.swift */; };
 		A4E9B902B2F812ADBEC39B3F /* MobileAPIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7CD93057BD3314F19801D37 /* MobileAPIClient.swift */; };
+		B10741E1C785A50F4E038840 /* MobileDocuments.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFADD8DD69C633C08E1FB2C1 /* MobileDocuments.swift */; };
 		B3DEF8C2B7B191698B11AF7B /* DossierApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = C10800C1BEBFB42D5D524B8B /* DossierApp.swift */; };
 		B4B0DB23575A4AC75BAC8B53 /* MobileModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = B43500FD9762BACE39BEB9B7 /* MobileModels.swift */; };
 		B6BEB4633CB5A0D7290F7C71 /* libsqlite3.tbd in Frameworks */ = {isa = PBXBuildFile; fileRef = 4FA897F28AAE872988CB81F7 /* libsqlite3.tbd */; };
@@ -59,6 +62,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		05D4D82ADC75C9B9838C8977 /* ApplicationDocumentsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ApplicationDocumentsView.swift; sourceTree = "<group>"; };
 		1C594D1817B7E43B76D7E603 /* ShareViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareViewController.swift; sourceTree = "<group>"; };
 		246FE746EBE785F4BB617F76 /* EventKitUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = EventKitUI.framework; path = System/Library/Frameworks/EventKitUI.framework; sourceTree = SDKROOT; };
 		264248C03D1004430A554798 /* ShareCaptureView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareCaptureView.swift; sourceTree = "<group>"; };
@@ -77,6 +81,7 @@
 		B87E6FE7674561D8755E9EFF /* AppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModel.swift; sourceTree = "<group>"; };
 		C10800C1BEBFB42D5D524B8B /* DossierApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DossierApp.swift; sourceTree = "<group>"; };
 		C7CD93057BD3314F19801D37 /* MobileAPIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MobileAPIClient.swift; sourceTree = "<group>"; };
+		CFADD8DD69C633C08E1FB2C1 /* MobileDocuments.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MobileDocuments.swift; sourceTree = "<group>"; };
 		DA0B61165C4C5EEE8E2DAB37 /* DesignTokens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesignTokens.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -135,6 +140,7 @@
 			isa = PBXGroup;
 			children = (
 				7D2A992CA8FE18192BCB07CE /* ApplicationDetailView.swift */,
+				05D4D82ADC75C9B9838C8977 /* ApplicationDocumentsView.swift */,
 				B87E6FE7674561D8755E9EFF /* AppModel.swift */,
 				C10800C1BEBFB42D5D524B8B /* DossierApp.swift */,
 				7E7D6D2D13F7D86008535F45 /* WorkspaceViews.swift */,
@@ -168,6 +174,7 @@
 				DA0B61165C4C5EEE8E2DAB37 /* DesignTokens.swift */,
 				7F45653CB8287D52B6A13C8F /* LocalCacheStore.swift */,
 				C7CD93057BD3314F19801D37 /* MobileAPIClient.swift */,
+				CFADD8DD69C633C08E1FB2C1 /* MobileDocuments.swift */,
 				B43500FD9762BACE39BEB9B7 /* MobileModels.swift */,
 				B018A736605C25106CAF9034 /* SessionTokenStore.swift */,
 			);
@@ -285,6 +292,7 @@
 				F1A16E71F7C2DB2B07BED3A8 /* DesignTokens.swift in Sources */,
 				0DEC9CCA113791C8B1C29186 /* LocalCacheStore.swift in Sources */,
 				A4E9B902B2F812ADBEC39B3F /* MobileAPIClient.swift in Sources */,
+				B10741E1C785A50F4E038840 /* MobileDocuments.swift in Sources */,
 				D6C3B9381CC9BDEF2BCCC637 /* MobileModels.swift in Sources */,
 				BDB61BA82ECF35AD251E62B2 /* SessionTokenStore.swift in Sources */,
 				F9611FB21BB4447AFD300067 /* ShareCaptureView.swift in Sources */,
@@ -298,11 +306,13 @@
 			files = (
 				4D7FAA595C9E2AAAEC089D54 /* AppModel.swift in Sources */,
 				76437DBF529263F2D2756B4F /* ApplicationDetailView.swift in Sources */,
+				6B3997F26AEC35F7109CD4CF /* ApplicationDocumentsView.swift in Sources */,
 				C40DB4A19A0C498167DC7BD7 /* CaptureOutboxStore.swift in Sources */,
 				FB89B7D9BC753F8F6A90BDBB /* DesignTokens.swift in Sources */,
 				B3DEF8C2B7B191698B11AF7B /* DossierApp.swift in Sources */,
 				716130D556B8BDB23CC52C12 /* LocalCacheStore.swift in Sources */,
 				D889EEEAED34FB7A74BC59F5 /* MobileAPIClient.swift in Sources */,
+				A1048B094FD2CCCE558D5E5E /* MobileDocuments.swift in Sources */,
 				B4B0DB23575A4AC75BAC8B53 /* MobileModels.swift in Sources */,
 				1A6AD734098E5BB387CFDF50 /* SessionTokenStore.swift in Sources */,
 				487180FFDEEB59807C8D9944 /* WorkspaceViews.swift in Sources */,

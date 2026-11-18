@@ -162,6 +162,7 @@ struct ApplicationDetailView: View {
                         }
                     }
                 }
+                ApplicationDocumentsSection(applicationID: currentApplication.id)
                 if hasReviewedEmail {
                     emailActions
                 }
