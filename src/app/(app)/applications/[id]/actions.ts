@@ -14,6 +14,7 @@ import { WRITTEN_EMAIL_UNITS } from "@/lib/application-email";
 import { documentLabels } from "@/lib/document-labels";
 import { frozenCopySchema, frozenProfile, readFrozenCopy, withSectionFromProfile } from "@/lib/frozen-copy";
 import { updateDocuments } from "@/lib/document-units";
+import { addApplicationNote, applicationNoteBodySchema, deleteApplicationNote, updateApplicationNote } from "@/lib/application-notes";
 import { DOCUMENT_LABELS } from "@/lib/file-name";
 import { syncInterviewToCalendar } from "@/lib/google/availability";
 import { GoogleError } from "@/lib/google/errors";
@@ -446,11 +447,8 @@ export const addMatchSkill = action(z.object({ id: z.string().min(1), index: z.n
 // Private notes (E8-9, APP-14). They stay on this server and never go into
 // a prompt: no AI task reads the Note table.
 
-const noteBody = z.string().trim().min(1, "Write something first.").max(5000);
-
-export const addNote = action(z.object({ id: z.string().min(1), body: noteBody }), async ({ id, body }) => {
-  if (!(await prisma.application.count({ where: { id } }))) throw new ActionError(GONE);
-  await prisma.note.create({ data: { applicationId: id, body } });
+export const addNote = action(z.object({ id: z.string().min(1), body: applicationNoteBodySchema }), async ({ id, body }) => {
+  if (!(await addApplicationNote(id, body))) throw new ActionError(GONE);
   refresh(id);
   return null;
 });
@@ -458,26 +456,30 @@ export const addNote = action(z.object({ id: z.string().min(1), body: noteBody }
 const NOTE_GONE = "That note no longer exists.";
 
 export const updateNote = action(
-  z.object({ id: z.string().min(1), noteId: z.string().min(1), body: noteBody }),
-  async ({ id, noteId, body }) => {
-    const { count } = await prisma.note.updateMany({ where: { id: noteId, applicationId: id }, data: { body } });
-    if (count === 0) throw new ActionError(NOTE_GONE);
+  z.object({ id: z.string().min(1), noteId: z.string().min(1), body: applicationNoteBodySchema, expectedUpdatedAt: z.iso.datetime({ offset: true }) }),
+  async ({ id, noteId, body, expectedUpdatedAt }) => {
+    const result = await updateApplicationNote({ applicationId: id, noteId, body, expectedUpdatedAt: new Date(expectedUpdatedAt) });
+    if (result.outcome === "not-found") throw new ActionError(NOTE_GONE);
+    if (result.outcome === "conflict") throw new ActionError("This note changed since you opened it. Reload it before saving.");
     refresh(id);
     return null;
   },
 );
 
 /** Deletes a note at once; it comes back with its date through `restoreNote` (Undo on the toast). */
-export const deleteNote = action(z.object({ id: z.string().min(1), noteId: z.string().min(1) }), async ({ id, noteId }) => {
-  const note = await prisma.note.findFirst({ where: { id: noteId, applicationId: id } });
-  if (!note) throw new ActionError(NOTE_GONE);
-  await prisma.note.delete({ where: { id: note.id } });
-  refresh(id);
-  return { body: note.body, createdAt: note.createdAt.toISOString(), updatedAt: note.updatedAt.toISOString() };
-});
+export const deleteNote = action(
+  z.object({ id: z.string().min(1), noteId: z.string().min(1), expectedUpdatedAt: z.iso.datetime({ offset: true }) }),
+  async ({ id, noteId, expectedUpdatedAt }) => {
+    const result = await deleteApplicationNote({ applicationId: id, noteId, expectedUpdatedAt: new Date(expectedUpdatedAt) });
+    if (result.outcome === "not-found") throw new ActionError(NOTE_GONE);
+    if (result.outcome === "conflict") throw new ActionError("This note changed since you opened it. Reload it before deleting.");
+    refresh(id);
+    return { body: result.note.body, createdAt: result.note.createdAt.toISOString(), updatedAt: result.note.updatedAt.toISOString() };
+  },
+);
 
 export const restoreNote = action(
-  z.object({ id: z.string().min(1), body: noteBody, createdAt: z.iso.datetime(), updatedAt: z.iso.datetime() }),
+  z.object({ id: z.string().min(1), body: applicationNoteBodySchema, createdAt: z.iso.datetime({ offset: true }), updatedAt: z.iso.datetime({ offset: true }) }),
   async ({ id, body, createdAt, updatedAt }) => {
     if (!(await prisma.application.count({ where: { id } }))) throw new ActionError(GONE);
     await prisma.note.create({ data: { applicationId: id, body, createdAt: new Date(createdAt), updatedAt: new Date(updatedAt) } });

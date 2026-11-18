@@ -12,7 +12,8 @@ import { advance, undoChange } from "./status";
 export type StatusChangeResult =
   | { outcome: "changed"; event: StatusEvent }
   | { outcome: "unchanged" }
-  | { outcome: "not-found" };
+  | { outcome: "not-found" }
+  | { outcome: "conflict" };
 
 /** Moves an application to `to` and records the change. */
 export async function applyStatusChange(
@@ -20,16 +21,25 @@ export async function applyStatusChange(
   applicationId: string,
   to: ApplicationStatus,
   now = new Date(),
+  expectedUpdatedAt?: Date,
 ): Promise<StatusChangeResult> {
   return db.$transaction(async (tx) => {
     // Lock the row so two changes to the same application can't interleave:
     // a write that changes nothing locks it in PostgreSQL and SQLite alike.
-    await tx.$executeRaw`UPDATE "Application" SET id = id WHERE id = ${applicationId}`;
+    const locked = expectedUpdatedAt
+      ? await tx.$executeRaw`UPDATE "Application" SET id = id WHERE id = ${applicationId} AND "updatedAt" = ${expectedUpdatedAt}`
+      : await tx.$executeRaw`UPDATE "Application" SET id = id WHERE id = ${applicationId}`;
+    if (expectedUpdatedAt && locked === 0) {
+      const current = await tx.application.findUnique({ where: { id: applicationId }, select: { awaitingReview: true } });
+      return current && !current.awaitingReview ? { outcome: "conflict" } : { outcome: "not-found" };
+    }
     const application = await tx.application.findUnique({
       where: { id: applicationId },
-      select: { status: true, furthestStage: true, sentAt: true, boardSort: true },
+      select: { status: true, furthestStage: true, sentAt: true, boardSort: true, awaitingReview: true },
     });
     if (!application) return { outcome: "not-found" };
+    // The mobile detail API deliberately hides agent drafts awaiting review.
+    if (expectedUpdatedAt && application.awaitingReview) return { outcome: "not-found" };
 
     const change = advance(application, to, now);
     if (!change) return { outcome: "unchanged" };

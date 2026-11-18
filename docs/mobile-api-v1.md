@@ -113,6 +113,14 @@ Success is HTTP `200`:
     "nextInterviewAt": null,
     "createdAt": "2026-11-17T21:15:00.000Z",
     "updatedAt": "2026-11-17T21:15:00.000Z",
+    "notes": [
+      {
+        "id": "cm...",
+        "body": "Called the recruiter; second round next week.",
+        "createdAt": "2026-11-17T21:15:00.000Z",
+        "updatedAt": "2026-11-17T21:15:00.000Z"
+      }
+    ],
     "extracted": {
       "title": "Product Designer",
       "company": "Northwind",
@@ -130,7 +138,29 @@ Success is HTTP `200`:
 }
 ```
 
-The application DTO always includes every field shown above. `deadline`, `sentAt`, and `nextInterviewAt` may be `null`; `createdAt` and `updatedAt` are always present. `postingUrl` is an HTTP(S) URL or the empty string; `postingText` is the saved original text. `extracted` is parsed through the shared extraction schema, with legacy application fields used as the fallback. `match` is `null` for absent or invalid legacy data; otherwise it has shape `{ "items": [{ "requirement": string, "result": "covered" | "partial" | "gap", "skill": string | null, "experienceIds": string[], "note": string | null }] }`.
+The application DTO always includes every field shown above. `deadline`, `sentAt`, and `nextInterviewAt` may be `null`; `createdAt` and `updatedAt` are always present. `notes` is the application's private note history, newest first; each note has its own `updatedAt` version. `postingUrl` is an HTTP(S) URL or the empty string; `postingText` is the saved original text. `extracted` is parsed through the shared extraction schema, with legacy application fields used as the fallback. `match` is `null` for absent or invalid legacy data; otherwise it has shape `{ "items": [{ "requirement": string, "result": "covered" | "partial" | "gap", "skill": string | null, "experienceIds": string[], "note": string | null }] }`.
+
+### `PATCH /api/mobile/v1/applications/{id}`
+
+Requires a valid bearer token. The strict JSON body accepts only the current `updatedAt` from the application detail and a status:
+
+```json
+{ "expectedUpdatedAt": "2026-11-17T21:15:00.000Z", "status": "INTERVIEW" }
+```
+
+`status` uses the shared application status enum: `DRAFT`, `SENT`, `SCREENING`, `INTERVIEW`, `OFFER`, `ACCEPTED`, `REJECTED`, or `DECLINED`. Any status can move to any other, matching the web status menu. The shared funnel rules update `sentAt` and the furthest stage. Changing status never sends an email. Success is HTTP `200` with `{ "application": <the full application detail DTO> }`. A stale `expectedUpdatedAt` returns `409 conflict`; a missing application or one awaiting review returns `404 not_found`.
+
+### `POST /api/mobile/v1/applications/{id}/notes`
+
+Requires a valid bearer token. The strict JSON body is `{ "body": string }`. It follows the web Notes tab rule: trim whitespace, require nonblank text, and limit the body to 5,000 characters. Success is HTTP `200` with `{ "note": { "id", "body", "createdAt", "updatedAt" } }`. A missing application or one awaiting review returns `404 not_found`. This creates a new dated note, so clients must not blindly retry after an ambiguous response.
+
+### `PATCH /api/mobile/v1/applications/{id}/notes/{noteId}`
+
+Requires a valid bearer token. The strict JSON body is `{ "body": string, "expectedUpdatedAt": string }`. It uses the same body validation as the web Notes tab and only updates the note when `expectedUpdatedAt` matches that note's `updatedAt`. Success is HTTP `200` with `{ "note": { "id", "body", "createdAt", "updatedAt" } }`. A stale note returns `409 conflict`; a missing note, application, or note belonging to another application returns `404 not_found`.
+
+### `DELETE /api/mobile/v1/applications/{id}/notes/{noteId}`
+
+Requires a valid bearer token. The strict JSON body is `{ "expectedUpdatedAt": string }`. Deletion is scoped to both path IDs and occurs only when the note version matches. Success is HTTP `200` with `{ "ok": true }`. A stale note returns `409 conflict`; a missing note, application, or note belonging to another application returns `404 not_found`.
 
 ## Profile
 

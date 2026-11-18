@@ -89,6 +89,12 @@ describe("mobile resource DTOs", () => {
       nextInterviewAt: null,
       createdAt: new Date("2026-11-01T00:00:00.000Z"),
       updatedAt: new Date("2026-11-17T12:00:00.000Z"),
+      notes: [{
+        id: "note-1",
+        body: "Called John.",
+        createdAt: new Date("2026-11-17T11:00:00.000Z"),
+        updatedAt: new Date("2026-11-17T12:00:00.000Z"),
+      }],
     });
 
     await expect(getMobileApplication("application-1")).resolves.toMatchObject({
@@ -100,6 +106,7 @@ describe("mobile resource DTOs", () => {
       postingText: "Original posting",
       sentAt: "2026-11-17T12:00:00.000Z",
       nextInterviewAt: null,
+      notes: [{ id: "note-1", body: "Called John.", createdAt: "2026-11-17T11:00:00.000Z", updatedAt: "2026-11-17T12:00:00.000Z" }],
       extracted: { title: "Designer", company: "Northwind", requirements: [] },
       match: null,
     });

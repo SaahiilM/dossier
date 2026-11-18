@@ -91,6 +91,10 @@ export async function getMobileApplication(id: string): Promise<MobileApplicatio
       nextInterviewAt: true,
       createdAt: true,
       updatedAt: true,
+      notes: {
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+        select: { id: true, body: true, createdAt: true, updatedAt: true },
+      },
     },
   });
   if (!application) return null;
@@ -118,6 +122,12 @@ export async function getMobileApplication(id: string): Promise<MobileApplicatio
     nextInterviewAt: iso(application.nextInterviewAt),
     createdAt: application.createdAt.toISOString(),
     updatedAt: application.updatedAt.toISOString(),
+    notes: application.notes.map((note) => ({
+      id: note.id,
+      body: note.body,
+      createdAt: note.createdAt.toISOString(),
+      updatedAt: note.updatedAt.toISOString(),
+    })),
     extracted: extractedSchema.parse(extracted),
     match: parsedMatch.success ? parsedMatch.data : null,
   };

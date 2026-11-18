@@ -788,9 +788,9 @@ describe("downloading PDFs (E8-8)", () => {
 
 describe("notes and activity (E8-9)", () => {
   const activity = [
-    { kind: "note" as const, id: "n1", body: "Called John.\nSecond round next week.", date: "3 Oct", edited: false },
+    { kind: "note" as const, id: "n1", body: "Called John.\nSecond round next week.", date: "3 Oct", edited: false, updatedAt: "2026-10-03T13:00:00.000Z" },
     { kind: "status" as const, id: "e2", status: "INTERVIEW" as const, date: "3 Oct" },
-    { kind: "note" as const, id: "n2", body: "Sent a thank-you.", date: "1 Oct", edited: true },
+    { kind: "note" as const, id: "n2", body: "Sent a thank-you.", date: "1 Oct", edited: true, updatedAt: "2026-10-02T10:00:00.000Z" },
     { kind: "status" as const, id: "e1", status: "SENT" as const, date: "1 Oct" },
     { kind: "created" as const, id: "created" as const, date: "28 Sep" },
   ];
@@ -839,14 +839,14 @@ describe("notes and activity (E8-9)", () => {
     expect(box).toHaveFocus();
     await user.type(box, " And a follow-up.");
     await user.click(within(timeline()).getByRole("button", { name: "Save" }));
-    expect(updateNote).toHaveBeenCalledWith({ id: "app-1", noteId: "n2", body: "Sent a thank-you. And a follow-up." });
+    expect(updateNote).toHaveBeenCalledWith({ id: "app-1", noteId: "n2", body: "Sent a thank-you. And a follow-up.", expectedUpdatedAt: "2026-10-02T10:00:00.000Z" });
   });
 
   it("deletes a note with Undo on the toast", async () => {
     const user = userEvent.setup();
     open();
     await user.click(screen.getByRole("button", { name: "Delete the note from 3 Oct" }));
-    expect(deleteNote).toHaveBeenCalledWith({ id: "app-1", noteId: "n1" });
+    expect(deleteNote).toHaveBeenCalledWith({ id: "app-1", noteId: "n1", expectedUpdatedAt: "2026-10-03T13:00:00.000Z" });
     expect(toast).toHaveBeenLastCalledWith("Note deleted.", { action: expect.objectContaining({ label: "Undo" }) });
     await act(async () => vi.mocked(toast).mock.lastCall?.[1]?.action?.onClick());
     expect(restoreNote).toHaveBeenCalledWith({
