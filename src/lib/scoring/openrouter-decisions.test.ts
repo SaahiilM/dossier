@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { AiError } from "@/lib/ai/errors";
 import { demoProfile } from "@/lib/demo-profile";
 
-import { jevFit, jevParts, jevQuestions } from "./jev";
+import { jevFit, jevParts, jevQuestions } from "./legacy-jev";
 import {
   DECISION_CATALOG_URL,
   DECISIONS_URL,

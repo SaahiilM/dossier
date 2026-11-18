@@ -7,7 +7,7 @@ import type { PostingFit } from "@/lib/fit";
 import type { ProfileData } from "@/lib/profile";
 import type { UsageSink } from "@/lib/usage";
 
-import { jevFit, jevParts, jevPostingText, jevQuestions, jevState, type JevPosting } from "./jev";
+import { jevFit, jevParts, jevPostingText, jevQuestions, jevState, type JevPosting } from "./legacy-jev";
 import { postingLines } from "./posting-lines";
 import { OPENROUTER_DECISION_MODEL } from "./scorers";
 import { answerSchema, type Answer, type Question } from "./typesafe";

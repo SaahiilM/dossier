@@ -21,7 +21,7 @@ export const AI_PROVIDERS = [
   "claude_cli",
 ] as const;
 export const JOB_SOURCE_NAMES = ["jsearch", "adzuna", "arbeitsagentur", "freehire", "off"] as const;
-export const SCORER_NAMES = ["ai", "jev", "openrouter", "openrouter-decisions"] as const;
+export const SCORER_NAMES = ["ai", "jev", "openrouter", "openrouter-decisions", "openai-decisions"] as const;
 
 // An empty value (`DOSSIER_AI_KEY=` in .env) counts as unset.
 const unsetIfEmpty = (value: unknown) =>
@@ -152,9 +152,9 @@ const schema = z.object({
       .toLowerCase()
       .pipe(z.enum(["on", "off"], { error: (issue) => `DOSSIER_JOBS_ARBEITSAGENTUR must be on or off (got "${String(issue.input)}").` })),
   ),
-  // Defaults for Settings → Scoring (#274), until a choice is saved there:
+  // Defaults for Settings → Scoring (#274, E25-2), until a choice is saved there:
   // ai scores postings with the AI provider, jev with TypeSafe's Jev,
-  // openrouter with a chat model, openrouter-decisions with the decision API.
+  // openai-decisions and openrouter with those (their keys are saved in Settings).
   DOSSIER_SCORER: optional(
     z
       .string()

@@ -16,7 +16,7 @@ import { ClaudeCliProvider } from "./providers/claude-cli";
 import { OpenAICompatibleProvider } from "./providers/openai-compatible";
 
 export { AiError } from "./errors";
-export type { AIProvider, ChatMessage, CompletionRequest, JsonCompletionRequest } from "./provider";
+export type { AIProvider,    } from "./provider";
 
 /**
  * A provider for `config`, keeping each answer's tokens for the Usage screen.

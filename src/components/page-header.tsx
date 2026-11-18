@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 
+import { Breadcrumb, type Crumb } from "./breadcrumb";
 import { PageBarIcon } from "./page-bar-icon";
 
 export type PageHeaderProps = {
@@ -10,6 +11,8 @@ export type PageHeaderProps = {
   actions?: ReactNode;
   /** Before the title, e.g. a breadcrumb back to the list. Replaces the section's icon. */
   before?: ReactNode;
+  /** Above the title, on a page below a top-level one (#514): its parents, then the page itself. */
+  breadcrumb?: readonly Crumb[];
 };
 
 /**
@@ -17,7 +20,7 @@ export type PageHeaderProps = {
  * section's icon, the screen's title and its actions, staying in view while
  * the page scrolls. The description, if any, sits under it.
  */
-export function PageHeader({ title, description, actions, before }: PageHeaderProps) {
+export function PageHeader({ title, description, actions, before, breadcrumb }: PageHeaderProps) {
   return (
     <>
       <PageBar>
@@ -42,7 +45,7 @@ export function PageHeader({ title, description, actions, before }: PageHeaderPr
  * skeleton, an error). Sticks to the top of the window; the shell's colour
  * behind it fills its rounded corners, so the page doesn't show through.
  */
-export function PageBar({ children }: { children: ReactNode }) {
+export function PageBar({ children, compact = false }: { children: ReactNode; /** One row with a line under it, as on an application's page (E30-2). */ compact?: boolean }) {
   return (
     // -mx-px: over the panel's side borders, so the bar's own line up with them.
     // pt-2: the shell's 8px above the panel, as at its sides and bottom; it

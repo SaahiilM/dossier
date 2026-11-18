@@ -2,8 +2,9 @@ import "server-only";
 
 import { z } from "zod";
 
+import { profileIdOr } from "@/lib/profiles";
 import { prisma } from "@/lib/prisma";
-import { basicsFromFields, fieldsFromBasics, type Basics } from "@/lib/profile";
+import { basicsFromFields, type Basics } from "@/lib/profile";
 
 export const profileBasicsSchema = z.object({
   name: z.string().max(200),
@@ -20,28 +21,34 @@ export const profileBasicsSchema = z.object({
   showAge: z.boolean(),
 });
 
-export async function writeProfileBasics(basics: Basics): Promise<void> {
-  await writeFields(Object.entries(fieldsFromBasics(basics)));
+export async function writeProfileBasics(basics: Basics, profileId: string): Promise<void> {
+  await patchProfileBasics(basics, profileId);
 }
 
-export async function readProfileBasics(): Promise<Basics> {
-  return basicsFromFields(await prisma.profileField.findMany());
+export async function readProfileBasics(profileId?: string): Promise<Basics> {
+  const id = await profileIdOr(profileId);
+  const [fields, profile] = await Promise.all([
+    prisma.profileField.findMany(),
+    prisma.profile.findUniqueOrThrow({ where: { id }, select: { headline: true, summary: true } }),
+  ]);
+  return { ...basicsFromFields(fields), ...profile };
 }
 
-export async function patchProfileBasics(patch: Partial<Basics>): Promise<Basics> {
-  const fields = Object.entries(patch).map(([key, value]): [string, string | null] => [
+export async function patchProfileBasics(patch: Partial<Basics>, profileId?: string): Promise<Basics> {
+  const id = await profileIdOr(profileId);
+  const { headline, summary, ...shared } = patch;
+  const fields = Object.entries(shared).map(([key, value]): [string, string | null] => [
     key, typeof value === "boolean" ? (value ? "true" : null) : value || null,
   ]);
-  await writeFields(fields);
-  return readProfileBasics();
-}
-
-async function writeFields(fields: [string, string | null][]): Promise<void> {
-  await prisma.$transaction(
-    fields.map(([key, value]) =>
+  await prisma.$transaction([
+    ...fields.map(([key, value]) =>
       value === null
         ? prisma.profileField.deleteMany({ where: { key } })
         : prisma.profileField.upsert({ where: { key }, create: { key, value }, update: { value } }),
     ),
-  );
+    ...(headline !== undefined || summary !== undefined
+      ? [prisma.profile.update({ where: { id }, data: { headline, summary } })]
+      : []),
+  ]);
+  return readProfileBasics(id);
 }

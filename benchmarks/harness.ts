@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 import { config as loadDotenv } from "dotenv";
 
 import { CASES, type CaseTag, type Fixture, type GoldLabel } from "./fixtures/cases.ts";
-import { JEV_WEIGHTS, jevParts, jevQuestions, jevScore, jevState, type JevParts, type JevPosting } from "../src/lib/scoring/jev.ts";
+import { JEV_WEIGHTS, jevParts, jevQuestions, jevScore, jevState, type JevParts, type JevPosting } from "../src/lib/scoring/legacy-jev.ts";
 import { postingLines } from "../src/lib/scoring/posting-lines.ts";
 import type { ProfileData } from "../src/lib/profile.ts";
 import { emptyWorkAuthorization } from "../src/lib/work-authorization.ts";
@@ -1050,7 +1050,7 @@ export function renderReport(result: Awaited<ReturnType<typeof runLive>>, summar
     "",
     "The request body has model, state, questions, and provider.allow_fallbacks false.",
     "State and questions come from jevState and jevQuestions.",
-    "The score uses JEV_WEIGHTS from src/lib/scoring/jev.ts.",
+    "The score uses JEV_WEIGHTS from src/lib/scoring/legacy-jev.ts.",
     "Run on Node 24 or newer. Node 22 has no crypto.argon2, and the production loader imports it.",
     "The gate thresholds were fixed before the run. Dev rows did not change them. Heldout rows did not change them.",
     "",

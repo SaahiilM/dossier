@@ -8,7 +8,7 @@ import type { ProfileData } from "@/lib/profile";
 import { workAuthorizationForScorer } from "@/lib/work-authorization";
 
 import type { ScoringConfig } from "./config";
-import { JEV_WEIGHTS, jevPostingText, jevQuestions, SCORE_POSTING_JEV_VERSION } from "./jev";
+import { JEV_WEIGHTS, jevPostingText, jevQuestions, SCORE_POSTING_JEV_VERSION } from "./legacy-jev";
 import { SCORE_POSTING_OPENROUTER_DECISIONS_VERSION, SCORE_POSTING_OPENROUTER_VERSION } from "./versions";
 import type { ScorablePosting } from "./index";
 

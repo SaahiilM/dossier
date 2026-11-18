@@ -58,7 +58,7 @@ export async function listMobileApplications(cursorValue?: string): Promise<{
     status: row.status,
     archived: row.archived,
     match: row.match,
-    score: row.score,
+    score: row.match && row.match.total > 0 ? Math.round(100 * row.match.hit / row.match.total) : null,
     updatedAt: new Date(row.updatedAt).toISOString(),
   }));
 

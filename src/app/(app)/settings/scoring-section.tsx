@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { RadioGroup } from "radix-ui";
-import { useEffect, useState } from "react";
+import { useState, type ReactNode } from "react";
 
 import { KeyField } from "@/components/key-field";
 import { useTrackSave } from "@/components/save-tracker";
@@ -10,22 +10,10 @@ import { toastResult } from "@/components/toast";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Select } from "@/components/ui/select";
-import { OPENROUTER_DECISION_MODEL, OPENROUTER_KEYS_URL, SCORER_INFO, SCORERS, TYPESAFE_KEY_URL, type Scorer, type ScoringView } from "@/lib/scoring/scorers";
+import { OPENROUTER_SCORING_MODEL, SCORER_INFO, SCORERS, type Scorer, type ScoringView } from "@/lib/scoring/scorers";
 import { cn } from "@/lib/cn";
-import { useAutosave } from "@/hooks/use-autosave";
 
-import {
-  listOpenRouterDecisionModels,
-  listOpenRouterScoringModels,
-  saveOpenRouterScoringKey,
-  saveOpenRouterScoringModel,
-  saveScorer,
-  saveTypesafeKey,
-  testJev,
-  testOpenRouterDecisions,
-  testOpenRouterScoring,
-} from "./actions";
+import { saveOpenRouterScoringModel, saveScorer, saveScoringKey, testScoringModel } from "./actions";
 import { SettingsSectionIntro } from "./settings-screen";
 
 type Connection =
@@ -34,98 +22,47 @@ type Connection =
   | { status: "connected"; model: string; seconds: number }
   | { status: "failed"; message: string };
 
-type ModelList = { loading: true } | { loading: false; models: string[]; problem: string | null };
-
-const OTHER_MODEL = "__other";
-
 /**
- * Settings → Scoring (#274): whether Score in Find jobs and the job agent
- * use the AI model, Jev, an OpenRouter decision model, or an OpenRouter chat model. Each change saves on its own.
+ * Settings → Scoring (#274, E25-2): which scoring model judges how well
+ * postings fit, from the one list of them, with the chosen one's key and a
+ * connection test. Each change saves on its own; a key is saved when you
+ * leave its field and never shown again.
  */
 export function ScoringSection({ initial }: { initial: ScoringView }) {
   const track = useTrackSave();
   const [view, setView] = useState(initial);
   const [connection, setConnection] = useState<Connection>({ status: "untested" });
-  const [openRouterModel, setOpenRouterModel] = useState(initial.openRouterModel);
-  const [otherOpenRouterModel, setOtherOpenRouterModel] = useState(false);
-  const [modelList, setModelList] = useState<ModelList>(
-    initial.scorer === "OPENROUTER" || initial.scorer === "OPENROUTER_DECISIONS" ? { loading: true } : { loading: false, models: [], problem: null },
-  );
 
   const apply = (result: Awaited<ReturnType<typeof saveScorer>>) => {
     if (result.ok) setView(result.data);
     return result.ok;
   };
 
-  const reloadOpenRouterModels = (scorer: Scorer = view.scorer) => {
-    if (scorer !== "OPENROUTER" && scorer !== "OPENROUTER_DECISIONS") return;
-    setModelList({ loading: true });
-    const list = scorer === "OPENROUTER_DECISIONS" ? listOpenRouterDecisionModels({}) : listOpenRouterScoringModels({});
-    void list.then((result) => {
-      if (result.ok) setModelList({ loading: false, models: result.data.models, problem: result.data.problem });
-      else setModelList({ loading: false, models: [], problem: result.error });
-    });
-  };
-
-  useEffect(() => {
-    if (view.scorer !== "OPENROUTER" && view.scorer !== "OPENROUTER_DECISIONS") return;
-    let cancel = false;
-    const list = view.scorer === "OPENROUTER_DECISIONS" ? listOpenRouterDecisionModels({}) : listOpenRouterScoringModels({});
-    void list.then((result) => {
-      if (cancel) return;
-      if (result.ok) setModelList({ loading: false, models: result.data.models, problem: result.data.problem });
-      else setModelList({ loading: false, models: [], problem: result.error });
-    });
-    return () => {
-      cancel = true;
-    };
-  }, [view.scorer]);
-
-  const { flush: flushModel } = useAutosave({ model: openRouterModel }, async ({ model }) => {
-    const result = await track(saveOpenRouterScoringModel({ model }));
-    if (result.ok) setView(result.data);
-    return result;
-  });
-
   const choose = async (scorer: Scorer) => {
     setView((current) => ({ ...current, scorer }));
     setConnection({ status: "untested" });
-    if (scorer === "OPENROUTER" || scorer === "OPENROUTER_DECISIONS") setModelList({ loading: true });
     apply(toastResult(await track(saveScorer({ scorer }))));
   };
 
   const saveKey = async (change: { action: "set"; value: string } | { action: "clear" }) => {
     setConnection({ status: "untested" });
-    return apply(toastResult(await track(saveTypesafeKey({ change }))));
-  };
-
-  const saveOpenRouterKey = async (change: { action: "set"; value: string } | { action: "clear" }) => {
-    setConnection({ status: "untested" });
-    const ok = apply(toastResult(await track(saveOpenRouterScoringKey({ change }))));
-    if (ok) reloadOpenRouterModels();
-    return ok;
+    return apply(toastResult(await track(saveScoringKey({ scorer: view.scorer, change }))));
   };
 
   const test = async () => {
     if (connection.status === "testing") return;
     setConnection({ status: "testing" });
-    const result = view.scorer === "OPENROUTER"
-      ? await testOpenRouterScoring({})
-      : view.scorer === "OPENROUTER_DECISIONS"
-        ? await testOpenRouterDecisions({})
-        : await testJev({});
+    const result = await testScoringModel({ scorer: view.scorer });
     if (!result.ok) setConnection({ status: "failed", message: result.error });
     else if (result.data.connected) setConnection({ status: "connected", model: result.data.model, seconds: result.data.seconds });
     else setConnection({ status: "failed", message: result.data.message });
   };
 
-  const modelSelectValue = otherOpenRouterModel || !openRouterModel ? OTHER_MODEL : openRouterModel;
-  const decisionModelOptions = [...new Set([...(modelList.loading ? [] : modelList.models), openRouterModel].filter(Boolean))];
-
   return (
     <>
       <SettingsSectionIntro title="Scoring">
-        How Score in Find jobs and the job agent judge how well a posting fits your profile. Drafts are always written by your AI model.
+        Which model judges how well a posting fits a profile, for Score in Positions, New application and the job agent. Every model answers the same questions,
+        and Dossier adds the answers up the same way. Drafts are always written by your AI model.
       </SettingsSectionIntro>
 
       <RadioGroup.Root
@@ -159,215 +96,90 @@ export function ScoringSection({ initial }: { initial: ScoringView }) {
         ))}
       </RadioGroup.Root>
 
-      <p role="note" className="text-meta text-muted">
-        After you change scorer, saved scores may show as stale until you score again. Check whether your minimum score in{" "}
-        <Link href="/settings?section=agent" className="underline underline-offset-2 hover:text-ink">
-          Settings → Job agent
-        </Link>{" "}
-        still fits this scorer.
-      </p>
-
-      {view.scorer === "JEV" && (
-        <>
-          <p role="note" className="rounded-card bg-warning-surface px-4 py-3 text-meta text-warning">
-            Each posting you score goes to TypeSafe with your profile, without your name or contact details. Jev reads English best: postings in other languages are
-            judged less well.
-          </p>
-
-          <Card className="flex flex-col gap-5">
-            <KeyField
-              label="TypeSafe key"
-              keyState={view.keyState}
-              envName="DOSSIER_TYPESAFE_KEY"
-              getKey={{ href: TYPESAFE_KEY_URL, text: "the TypeSafe console" }}
-              onSave={saveKey}
+      <ChosenModel
+        scorer={view.scorer}
+        keyState={view.keys[view.scorer] ?? null}
+        connection={connection}
+        onSaveKey={saveKey}
+        onTest={() => void test()}
+        model={
+          view.scorer === "OPENROUTER" ? (
+            <Input
+              label="Model"
+              hint={`An OpenRouter model that answers in JSON, by its id. Empty for ${OPENROUTER_SCORING_MODEL}.`}
+              defaultValue={view.openrouterModel === OPENROUTER_SCORING_MODEL ? "" : view.openrouterModel}
+              placeholder={OPENROUTER_SCORING_MODEL}
+              onBlur={(event) => {
+                if (event.target.value.trim() === (view.openrouterModel === OPENROUTER_SCORING_MODEL ? "" : view.openrouterModel)) return;
+                setConnection({ status: "untested" });
+                void track(saveOpenRouterScoringModel({ model: event.target.value })).then((result) => apply(toastResult(result)));
+              }}
             />
-            <div className="flex flex-wrap items-center gap-3.5 pt-1">
-              <Button variant="secondary" onClick={() => void test()} disabled={connection.status === "testing"}>
-                {connection.status === "testing" ? "Testing…" : "Test connection"}
-              </Button>
-              <ConnectionStatus connection={connection} testingHint="Asking Jev one short question…" />
-            </div>
-          </Card>
-
-          <p className="text-sm text-muted">
-            Jev&apos;s scores and your AI model&apos;s aren&apos;t on the same scale. If the job agent queues too many postings or too few, change its minimum score in{" "}
-            <Link href="/settings?section=agent" className="underline underline-offset-2 hover:text-ink">
-              Settings → Job agent
-            </Link>
-            .
-          </p>
-        </>
-      )}
-
-      {view.scorer === "OPENROUTER" && (
-        <>
-          <p role="note" className="rounded-card bg-warning-surface px-4 py-3 text-meta text-warning">
-            Chat scoring uses its own OpenRouter key and chat model, separate from Settings → AI provider and from the decision model. Your profile goes to OpenRouter, without your name or contact details.
-          </p>
-
-          <Card className="flex flex-col gap-5">
-            <KeyField
-              label="OpenRouter key"
-              keyState={view.openRouterKeyState}
-              envName={view.openRouterKeyEnv ?? "DOSSIER_OPENROUTER_SCORING_KEY"}
-              getKey={{ href: OPENROUTER_KEYS_URL, text: "OpenRouter" }}
-              onSave={saveOpenRouterKey}
-            />
-            {modelList.loading ? (
-              <p className="text-meta text-muted">Loading models…</p>
-            ) : modelList.problem ? (
-              <Input
-                label="Judging model"
-                value={openRouterModel}
-                placeholder="e.g. anthropic/claude-sonnet-4"
-                hint={modelList.problem}
-                onChange={(event) => {
-                  setOpenRouterModel(event.target.value);
-                  setConnection({ status: "untested" });
-                }}
-                onBlur={() => void flushModel()}
-              />
-            ) : (
-              <Select
-                label="Judging model"
-                value={modelSelectValue}
-                onChange={(event) => {
-                  const value = event.target.value;
-                  if (value === OTHER_MODEL) {
-                    setOtherOpenRouterModel(true);
-                    return;
-                  }
-                  setOtherOpenRouterModel(false);
-                  setOpenRouterModel(value);
-                  setConnection({ status: "untested" });
-                  void saveOpenRouterScoringModel({ model: value }).then((result) => {
-                    if (result.ok) setView(result.data);
-                  });
-                }}
-              >
-                {!openRouterModel && !otherOpenRouterModel && <option value="">Choose a model</option>}
-                {modelList.models.map((id) => (
-                  <option key={id} value={id}>
-                    {id}
-                  </option>
-                ))}
-                <option value={OTHER_MODEL}>Other…</option>
-              </Select>
-            )}
-            {otherOpenRouterModel && !modelList.loading && !modelList.problem && (
-              <Input
-                label="Model id"
-                value={openRouterModel}
-                placeholder="Type the model's id on OpenRouter"
-                onChange={(event) => {
-                  setOpenRouterModel(event.target.value);
-                  setConnection({ status: "untested" });
-                }}
-                onBlur={() => void flushModel()}
-              />
-            )}
-            <div className="flex flex-wrap items-center gap-3.5 pt-1">
-              <Button variant="secondary" onClick={() => void test()} disabled={connection.status === "testing"}>
-                {connection.status === "testing" ? "Testing…" : "Test connection"}
-              </Button>
-              <ConnectionStatus connection={connection} testingHint="Asking the chat model one short question…" />
-            </div>
-          </Card>
-        </>
-      )}
-
-      {view.scorer === "OPENROUTER_DECISIONS" && (
-        <>
-          <p role="note" className="rounded-card bg-warning-surface px-4 py-3 text-meta text-warning">
-            Each posting you score goes to OpenRouter&apos;s decision API with your profile, without your name or contact details. Dossier asks the same questions as Jev and builds the score from the answers. It writes no prose. The default model is free. A paid model is refused, and a different model in the response is not used.
-          </p>
-
-          <Card className="flex flex-col gap-5">
-            <KeyField
-              label="OpenRouter key"
-              keyState={view.openRouterKeyState}
-              envName={view.openRouterKeyEnv ?? "DOSSIER_OPENROUTER_SCORING_KEY"}
-              getKey={{ href: OPENROUTER_KEYS_URL, text: "OpenRouter" }}
-              onSave={saveOpenRouterKey}
-            />
-            {modelList.loading ? (
-              <p className="text-meta text-muted">Loading decision models…</p>
-            ) : (
-              <Select
-                label="Decision model"
-                value={modelSelectValue}
-                hint={modelList.problem ?? `Default ${OPENROUTER_DECISION_MODEL}. A paid model is refused.`}
-                onChange={(event) => {
-                  const value = event.target.value;
-                  if (value === OTHER_MODEL) {
-                    setOtherOpenRouterModel(true);
-                    return;
-                  }
-                  setOtherOpenRouterModel(false);
-                  setOpenRouterModel(value);
-                  setConnection({ status: "untested" });
-                  void saveOpenRouterScoringModel({ model: value }).then((result) => {
-                    if (result.ok) setView(result.data);
-                  });
-                }}
-              >
-                {!openRouterModel && !otherOpenRouterModel && <option value="">Choose a decision model</option>}
-                {decisionModelOptions.map((id) => (
-                  <option key={id} value={id}>
-                    {id}
-                  </option>
-                ))}
-                <option value={OTHER_MODEL}>Other free model…</option>
-              </Select>
-            )}
-            {otherOpenRouterModel && !modelList.loading && (
-              <Input
-                label="Model id"
-                value={openRouterModel}
-                placeholder={OPENROUTER_DECISION_MODEL}
-                hint="A free decision model id. A paid model is refused."
-                onChange={(event) => {
-                  setOpenRouterModel(event.target.value);
-                  setConnection({ status: "untested" });
-                }}
-                onBlur={() => void flushModel()}
-              />
-            )}
-            <div className="flex flex-wrap items-center gap-3.5 pt-1">
-              <Button variant="secondary" onClick={() => void test()} disabled={connection.status === "testing"}>
-                {connection.status === "testing" ? "Testing…" : "Test connection"}
-              </Button>
-              <ConnectionStatus
-                connection={connection}
-                testingHint="Asking the decision model one short question…"
-                untested="Not tested since your last change · one short decision question"
-              />
-            </div>
-          </Card>
-        </>
-      )}
+          ) : null
+        }
+      />
     </>
   );
 }
 
-function ConnectionStatus({
+/** The chosen scoring model: what it's sent, its key when it needs one, and its connection test. */
+function ChosenModel({
+  scorer,
+  keyState,
   connection,
-  testingHint,
-  untested = "Not tested since your last change · a test costs a few dozen tokens",
+  onSaveKey,
+  onTest,
+  model,
 }: {
+  scorer: Scorer;
+  keyState: ScoringView["keys"][Scorer] | null;
   connection: Connection;
-  testingHint: string;
-  untested?: string;
+  onSaveKey: (change: { action: "set"; value: string } | { action: "clear" }) => Promise<boolean>;
+  onTest: () => void;
+  /** OpenRouter's model field, under its key. */
+  model: ReactNode;
 }) {
+  const info = SCORER_INFO[scorer];
+  return (
+    <>
+      {info.privacy && (
+        <p role="note" className="rounded-card bg-warning-surface px-4 py-3 text-meta text-warning">
+          {info.privacy}
+        </p>
+      )}
+      <Card className="flex flex-col gap-5">
+        {info.key ? (
+          <KeyField label={info.key.label} keyState={keyState ?? "none"} envName={info.key.envName ?? ""} getKey={info.key.getKey} onSave={onSaveKey} />
+        ) : (
+          <p className="text-sm text-muted">
+            It uses the model chosen in{" "}
+            <Link href="/settings?section=ai" className="underline underline-offset-2 hover:text-ink">
+              Settings → AI provider
+            </Link>
+            .
+          </p>
+        )}
+        {model}
+        <div className="flex flex-wrap items-center gap-3.5 pt-1">
+          <Button variant="secondary" onClick={onTest} disabled={connection.status === "testing"}>
+            {connection.status === "testing" ? "Testing…" : "Test connection"}
+          </Button>
+          <ConnectionStatus connection={connection} testing={info.testing} />
+        </div>
+      </Card>
+    </>
+  );
+}
+
+function ConnectionStatus({ connection, testing }: { connection: Connection; testing: string }) {
   const [dot, text, message] =
     connection.status === "connected"
       ? ["bg-success", "text-success", `Connected · ${connection.model} answered in ${connection.seconds.toLocaleString("en-US")} s`]
       : connection.status === "failed"
         ? ["bg-error", "text-error", connection.message]
         : connection.status === "testing"
-          ? ["bg-status-offer", "text-muted", testingHint]
-          : ["bg-faint", "text-muted", untested];
+          ? ["bg-status-offer", "text-muted", testing]
+          : ["bg-faint", "text-muted", "Not tested since your last change · a test costs a few dozen tokens"];
   return (
     <p role="status" className={cn("flex items-center gap-2 text-control", text)}>
       <span aria-hidden className={cn("size-2 flex-none rounded-full", dot)} />

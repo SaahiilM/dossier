@@ -6,7 +6,8 @@ import type { TokenCount, UsageSink, UsageTask } from "@/lib/usage";
 import { credential } from "@/lib/siwc";
 
 import { AiError, toAiError } from "../errors";
-import type { AIProvider, ChatMessage, CompletionRequest, JsonCompletionRequest } from "../provider";
+import type { AIProvider, CompletionRequest, JsonCompletionRequest } from "../provider";
+import type { ChatMessage } from "../messages";
 import { validateJson } from "../provider";
 
 import { readResponsesSse } from "./responses-sse";

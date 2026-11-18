@@ -38,7 +38,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     const { id: rawId } = await params;
     const id = applicationId(rawId);
     const input = parseBody(patchSchema, await readJsonBody(request, MAX_PATCH_BODY_BYTES));
-    const result = await applyStatusChange(prisma, id, input.status, new Date(), new Date(input.expectedUpdatedAt));
+    const result = await applyStatusChange(prisma, id, input.status, new Date(), { expectedUpdatedAt: new Date(input.expectedUpdatedAt) });
     if (result.outcome === "conflict") {
       throw new MobileApiError("conflict", "This application changed. Refresh it before saving.", 409);
     }
