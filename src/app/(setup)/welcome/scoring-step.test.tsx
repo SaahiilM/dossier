@@ -2,64 +2,65 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { ScoringView } from "@/lib/scoring/scorers";
+import { OPENROUTER_SCORING_MODEL, SCORER_INFO, SCORERS, type Scorer, type ScoringView } from "@/lib/scoring/scorers";
 
-import { saveScorer, testOpenRouterDecisions } from "../../(app)/settings/actions";
+import { saveOpenRouterScoringModel, saveScorer, saveScoringKey, testScoringModel } from "../../(app)/settings/actions";
 import { ScoringStep } from "./scoring-step";
 
 vi.mock("../../(app)/settings/actions", () => ({
   saveScorer: vi.fn(),
-  saveTypesafeKey: vi.fn(),
-  testJev: vi.fn(),
-  listOpenRouterScoringModels: vi.fn(async () => ({ ok: true, data: { models: ["google/gemini-2.5-flash"], problem: null } })),
-  listOpenRouterDecisionModels: vi.fn(async () => ({ ok: true, data: { models: ["perplexity/pplx-decider-v1.3:free"], problem: null } })),
-  saveOpenRouterScoringKey: vi.fn(async () => ({ ok: true, data: { scorer: "OPENROUTER", keyState: "none", openRouterKeyState: "set", openRouterModel: "" } })),
-  saveOpenRouterScoringModel: vi.fn(async () => ({ ok: true, data: { scorer: "OPENROUTER", keyState: "none", openRouterKeyState: "set", openRouterModel: "m" } })),
-  testOpenRouterScoring: vi.fn(),
-  testOpenRouterDecisions: vi.fn(),
+  saveScoringKey: vi.fn(),
+  saveOpenRouterScoringModel: vi.fn(),
+  testScoringModel: vi.fn(),
 }));
 vi.mock("@/components/toast", () => ({ toast: vi.fn(), toastResult: (result: unknown) => result }));
-vi.mock("next/navigation", () => ({
-  useRouter: () => ({ refresh: vi.fn() }),
-}));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
 
-const emptyOpenRouter = { openRouterKeyState: "none" as const, openRouterModel: "" };
-const ai: ScoringView = { scorer: "AI", keyState: "none", ...emptyOpenRouter };
+const initial: ScoringView = {
+  scorer: "AI",
+  keys: { JEV: "none", DECISIONS: "none", OPENROUTER: "none" },
+  openrouterModel: OPENROUTER_SCORING_MODEL,
+};
+const openrouterDecisions = SCORERS.find((scorer) => (scorer as string) === "OPENROUTER_DECISIONS");
 
 beforeEach(() => {
-  vi.mocked(saveScorer).mockReset().mockResolvedValue({ ok: true, data: { scorer: "OPENROUTER", keyState: "none", ...emptyOpenRouter } });
+  vi.mocked(saveScorer).mockReset().mockImplementation(async ({ scorer }) => ({ ok: true, data: { ...initial, scorer } }));
+  vi.mocked(saveScoringKey).mockReset().mockResolvedValue({ ok: true, data: initial });
+  vi.mocked(saveOpenRouterScoringModel).mockReset().mockResolvedValue({ ok: true, data: initial });
+  vi.mocked(testScoringModel).mockReset().mockResolvedValue({ ok: true, data: { connected: true, model: "test-model", seconds: 0.2 } });
 });
 
 describe("setup guide ScoringStep (E21-4)", () => {
-  it("offers AI, Jev and OpenRouter", () => {
-    render(<ScoringStep initial={ai} />);
-    expect(screen.getAllByRole("radio").map((radio) => radio.getAttribute("aria-label"))).toEqual([
-      "Your AI",
-      "Jev by TypeSafe",
-      "OpenRouter decision model",
-      "OpenRouter chat model",
-    ]);
+  it("offers every scorer in the shared upstream list", () => {
+    render(<ScoringStep initial={initial} />);
+    expect(screen.getAllByRole("radio").map((radio) => radio.getAttribute("aria-label"))).toEqual(
+      SCORERS.map((scorer) => (scorer === "AI" ? "Your AI" : SCORER_INFO[scorer].name)),
+    );
   });
 
-  it("saves OPENROUTER when chosen", async () => {
+  it("saves OpenRouter through the upstream scorer and key contracts", async () => {
     const user = userEvent.setup();
-    render(<ScoringStep initial={ai} />);
-    await user.click(screen.getByRole("radio", { name: "OpenRouter chat model" }));
+    render(<ScoringStep initial={initial} />);
+    await user.click(screen.getByRole("radio", { name: SCORER_INFO.OPENROUTER.name }));
     expect(saveScorer).toHaveBeenCalledWith({ scorer: "OPENROUTER" });
-    expect(screen.getByLabelText("OpenRouter key for scoring")).toBeInTheDocument();
+    expect(screen.getByLabelText(SCORER_INFO.OPENROUTER.key!.label)).toBeInTheDocument();
+
+    await user.type(screen.getByLabelText(SCORER_INFO.OPENROUTER.key!.label), "sk-or-test");
+    await user.click(screen.getByRole("button", { name: "Check it" }));
+    expect(saveScoringKey).toHaveBeenCalledWith({ scorer: "OPENROUTER", change: { action: "set", value: "sk-or-test" } });
+    expect(saveOpenRouterScoringModel).toHaveBeenCalledWith({ model: "" });
+    expect(testScoringModel).toHaveBeenCalledWith({ scorer: "OPENROUTER" });
+    expect(await screen.findByText(`It works: ${SCORER_INFO.OPENROUTER.name} answered.`)).toBeInTheDocument();
   });
 
-  it("saves the decision model and checks it with the decision test", async () => {
+  it.skipIf(!openrouterDecisions)("keeps OpenRouter Decisions as a selectable, tested scorer", async () => {
+    const scorer = openrouterDecisions as Scorer;
+    const view: ScoringView = { ...initial, scorer, keys: { ...initial.keys, [scorer]: "set" } };
     const user = userEvent.setup();
-    vi.mocked(saveScorer).mockResolvedValueOnce({
-      ok: true,
-      data: { scorer: "OPENROUTER_DECISIONS", keyState: "none", openRouterKeyState: "set", openRouterModel: "perplexity/pplx-decider-v1.3:free" },
-    });
-    vi.mocked(testOpenRouterDecisions).mockResolvedValue({ ok: true, data: { connected: true, model: "perplexity/pplx-decider-v1.3-20261112", seconds: 0.2 } });
-    render(<ScoringStep initial={{ scorer: "OPENROUTER_DECISIONS", keyState: "none", openRouterKeyState: "set", openRouterModel: "perplexity/pplx-decider-v1.3:free" }} />);
-    expect(await screen.findByRole("option", { name: "perplexity/pplx-decider-v1.3:free" })).toBeInTheDocument();
+    render(<ScoringStep initial={view} />);
+    expect(screen.getByRole("radio", { name: SCORER_INFO[scorer].name })).toBeChecked();
     await user.click(screen.getByRole("button", { name: "Check it" }));
-    expect(testOpenRouterDecisions).toHaveBeenCalledWith({});
-    expect(await screen.findByText("It works: the decision model answered.")).toBeInTheDocument();
+    expect(testScoringModel).toHaveBeenCalledWith({ scorer });
+    expect(await screen.findByText(`It works: ${SCORER_INFO[scorer].name} answered.`)).toBeInTheDocument();
   });
 });

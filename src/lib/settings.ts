@@ -224,9 +224,6 @@ const settingsSchema = z.object({
   // AI model. Jev's key is encrypted like the others, under its own key.
   scorer: z.enum(SCORERS).nullable().catch(null),
   typesafeKeyEnc: z.string().nullable().catch(null),
-  /** Independent OpenRouter judging credentials; isolated from general AI provider settings. */
-  openRouterScoringModel: z.string().nullable().catch(null),
-  openRouterScoringKeyEnc: z.string().nullable().catch(null),
   /** OpenAI Decisions' key (E25-3), and OpenRouter's for scoring with its model (E25-4). */
   decisionsKeyEnc: z.string().nullable().catch(null),
   openrouterScoringKeyEnc: z.string().nullable().catch(null),
@@ -332,10 +329,21 @@ const settingsSchema = z.object({
 });
 export type SettingsData = z.output<typeof settingsSchema>;
 
+/** Stored setting keys used before the upstream lower-case OpenRouter spelling. */
+export const LEGACY_SETTING_KEYS = {
+  openrouterScoringKeyEnc: "openRouterScoringKeyEnc",
+  openrouterScoringModel: "openRouterScoringModel",
+} as const satisfies Partial<Record<keyof SettingsData, string>>;
+
 /** The settings from Setting rows; keys it doesn't know are ignored. */
 export function settingsFromRows(rows: readonly { key: string; value: string }[]): SettingsData {
   // Old keys, such as Resume length's pageLimit (removed with the trimmer, #234), are left out here.
   const values: Record<string, string> = Object.fromEntries(rows.map((row) => [row.key, row.value]));
+  // Prefer the upstream spelling when both exist, while keeping older
+  // installs' OpenRouter values readable until they are next saved.
+  for (const [current, legacy] of Object.entries(LEGACY_SETTING_KEYS)) {
+    if (!(current in values) && legacy in values) values[current] = values[legacy]!;
+  }
   return settingsSchema.parse(values);
 }
 

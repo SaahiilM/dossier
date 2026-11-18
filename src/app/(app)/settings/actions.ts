@@ -360,9 +360,7 @@ const loadScoringView = async () => scoringView(await loadScoringConfig());
 
 /** Which scoring model scores postings (E25-2). */
 export const saveScorer = action(z.object({ scorer: z.enum(SCORERS) }), async ({ scorer }) => {
-  const current = await loadSettings();
-  const model = decisionModelOnSelect(current.openRouterScoringModel, scorer);
-  await saveSettings(model === undefined ? { scorer } : { scorer, openRouterScoringModel: model });
+  await saveSettings({ scorer });
   return loadScoringView();
 });
 

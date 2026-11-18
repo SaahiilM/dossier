@@ -33,6 +33,7 @@ const toModelList = (result: Awaited<ReturnType<typeof listAiModels>>): ModelLis
   result.ok ? { loading: false, ...result.data } : { loading: false, models: [], problem: result.error };
 
 const OTHER_MODEL = "__other";
+const SENT_TO_HOSTED = "your profile, the posting, an imported resume or a reply, depending on the task.";
 const looksLikeUrl = (value: string) => /^https?:\/\/\S+$/i.test(value.trim());
 
 /** Under each provider's name (E34-4, ST3): where it runs. */
@@ -260,10 +261,7 @@ export function AiProviderSection({
             }}
           />
           <Card className="flex flex-wrap items-center gap-3.5 p-[18px]">
-            <Button variant="secondary" onClick={() => void test()} disabled={connection.status === "testing"}>
-              {connection.status === "testing" ? "Testing…" : "Test connection"}
-            </Button>
-            <ConnectionStatus connection={connection} />
+            <ConnectionStatus connection={connection} onTest={() => void test()} />
           </Card>
         </>
       ) : (

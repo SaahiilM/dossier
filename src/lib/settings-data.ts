@@ -2,7 +2,7 @@ import "server-only";
 
 import type { Prisma, PrismaClient } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
-import { settingsFromRows, settingValue, type SettingsData } from "@/lib/settings";
+import { LEGACY_SETTING_KEYS, settingsFromRows, settingValue, type SettingsData } from "@/lib/settings";
 
 /** The settings in effect. Each profile's Base resume settings are its own (src/lib/profiles.ts). */
 export async function loadSettings(db: PrismaClient | Prisma.TransactionClient = prisma): Promise<SettingsData> {
@@ -20,5 +20,8 @@ export async function saveSettings(changes: Partial<SettingsData>, db?: Prisma.T
     const value = settingValue(change);
     if (value === null) await db.setting.deleteMany({ where: { key } });
     else await db.setting.upsert({ where: { key }, create: { key, value }, update: { value } });
+
+    const legacyKey = LEGACY_SETTING_KEYS[key as keyof typeof LEGACY_SETTING_KEYS];
+    if (legacyKey) await db.setting.deleteMany({ where: { key: legacyKey } });
   }
 }

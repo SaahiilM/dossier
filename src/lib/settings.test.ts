@@ -138,6 +138,22 @@ describe("stored settings", () => {
     expect(settingValue(null)).toBeNull();
   });
 
+  it("reads legacy OpenRouter setting keys through the upstream lower-case contract", () => {
+    expect(
+      settingsFromRows([
+        { key: "openRouterScoringKeyEnc", value: "v1.legacy-encrypted-value" },
+        { key: "openRouterScoringModel", value: "legacy/model" },
+      ]),
+    ).toMatchObject({ openrouterScoringKeyEnc: "v1.legacy-encrypted-value", openrouterScoringModel: "legacy/model" });
+
+    expect(
+      settingsFromRows([
+        { key: "openRouterScoringModel", value: "legacy/model" },
+        { key: "openrouterScoringModel", value: "current/model" },
+      ]).openrouterScoringModel,
+    ).toBe("current/model");
+  });
+
   it("reads values that don't fit as the default, and ignores unknown keys", () => {
     const settings = settingsFromRows([
       { key: "provider", value: "GEMINI" },

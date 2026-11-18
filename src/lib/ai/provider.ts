@@ -11,7 +11,7 @@ import { AiError, toAiError } from "./errors";
 // One interface for every AI provider (E6-1): a local model through Ollama or
 // llama.cpp, LM Studio, any OpenAI-compatible server, Anthropic or Mistral.
 
-type ChatMessage = { role: "user" | "assistant"; content: string };
+export type ChatMessage = { role: "user" | "assistant"; content: string };
 
 /** How much a model that thinks before answering may think; its own default when unset. */
 export type Effort = "low" | "medium" | "high";

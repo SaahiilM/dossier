@@ -63,6 +63,7 @@ describe("AiProviderSection", () => {
     await userEvent.click(screen.getByRole("radio", { name: "ChatGPT plan" }));
     expect(screen.getByTestId("subscription-provider")).toBeInTheDocument();
     expect(screen.queryByLabelText(/API key/i)).not.toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "Test connection" })).toHaveLength(1);
     await waitFor(() => expect(saveAiProvider).toHaveBeenCalledWith({ provider: "CHATGPT_SUBSCRIPTION", baseUrl: "", model: "" }));
   });
 

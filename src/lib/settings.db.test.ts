@@ -2,6 +2,7 @@ import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { loadProfileSettings, saveProfileSettings } from "@/lib/profiles";
 
 import { Prisma } from "@/generated/prisma/client";
+import { decryptSecret, encryptSecret, OPENROUTER_SCORING_KEY } from "@/lib/secrets";
 import { createTestClient, resetDatabase, TEST_PROFILE_ID } from "@/test/db";
 
 import { loadSettings, saveSettings } from "./settings-data";
@@ -48,6 +49,31 @@ describe("settings and themes", () => {
     await saveSettings({ docLanguage: null });
     expect(await loadSettings()).toMatchObject({ docLanguage: null, paper: "LETTER" });
     expect(await prisma().setting.count()).toBe(1);
+  });
+
+  it("reads legacy OpenRouter keys and removes their aliases as the canonical fields are saved", async () => {
+    const encryptedKey = encryptSecret(OPENROUTER_SCORING_KEY, "sk-or-existing");
+    await prisma().setting.createMany({
+      data: [
+        { key: "openRouterScoringKeyEnc", value: encryptedKey },
+        { key: "openRouterScoringModel", value: "legacy/model" },
+      ],
+    });
+
+    const legacy = await loadSettings();
+    expect(legacy).toMatchObject({ openrouterScoringModel: "legacy/model", openrouterScoringKeyEnc: encryptedKey });
+    expect(decryptSecret(OPENROUTER_SCORING_KEY, legacy.openrouterScoringKeyEnc!)).toBe("sk-or-existing");
+
+    await saveSettings({ openrouterScoringModel: "current/model", openrouterScoringKeyEnc: legacy.openrouterScoringKeyEnc });
+    expect(await prisma().setting.findMany({ where: { key: { in: ["openRouterScoringKeyEnc", "openRouterScoringModel"] } }, select: { key: true, value: true } })).toEqual([]);
+    expect(await prisma().setting.findMany({ where: { key: { in: ["openrouterScoringKeyEnc", "openrouterScoringModel"] } }, orderBy: { key: "asc" }, select: { key: true, value: true } })).toEqual([
+      { key: "openrouterScoringKeyEnc", value: encryptedKey },
+      { key: "openrouterScoringModel", value: "current/model" },
+    ]);
+
+    await saveSettings({ openrouterScoringKeyEnc: null });
+    expect(await loadSettings()).toMatchObject({ openrouterScoringKeyEnc: null });
+    expect(await prisma().setting.findMany({ where: { key: { in: ["openRouterScoringKeyEnc", "openrouterScoringKeyEnc"] } }, select: { key: true, value: true } })).toEqual([]);
   });
 
   it("saves as part of a transaction it's given", async () => {
