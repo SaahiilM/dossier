@@ -271,15 +271,92 @@ final class AppModel: ObservableObject {
         }
     }
 
-    func refreshApplicationDetail(id: String) async {
-        guard let session else { return }
+    func refreshApplicationDetail(id: String) async -> ApplicationRecord? {
+        do {
+            return try await fetchApplicationDetail(id: id)
+        } catch {
+            await handle(error)
+            return nil
+        }
+    }
+
+    func fetchApplicationDetail(id: String) async throws -> ApplicationRecord {
+        guard let session else { throw MobileAPIError.missingSession }
         do {
             let record = try await MobileAPIClient(serverAddress: serverAddress).application(id: id, token: session.accessToken)
+            upsertApplication(record)
+            return record
+        } catch let error as MobileAPIError where error.statusCode == 401 {
+            await expireSession()
+            throw MobileAPIError.expiredSession
+        }
+    }
+
+    func updateApplicationStatus(id: String, expectedUpdatedAt: String, status: ApplicationStatus) async throws -> ApplicationRecord {
+        guard let session else { throw MobileAPIError.missingSession }
+        do {
+            let record = try await MobileAPIClient(serverAddress: serverAddress).updateApplicationStatus(
+                id: id,
+                expectedUpdatedAt: expectedUpdatedAt,
+                status: status,
+                token: session.accessToken
+            )
+            upsertApplication(record)
+            return record
+        } catch let error as MobileAPIError where error.statusCode == 401 {
+            await expireSession()
+            throw MobileAPIError.expiredSession
+        }
+    }
+
+    func createApplicationNote(id: String, body: String) async throws -> ApplicationNote {
+        guard let session else { throw MobileAPIError.missingSession }
+        do {
+            let note = try await MobileAPIClient(serverAddress: serverAddress).createApplicationNote(id: id, body: body, token: session.accessToken)
+            upsertApplicationNote(note, applicationID: id)
+            return note
+        } catch let error as MobileAPIError where error.statusCode == 401 {
+            await expireSession()
+            throw MobileAPIError.expiredSession
+        }
+    }
+
+    func updateApplicationNote(id: String, noteID: String, body: String, expectedUpdatedAt: String) async throws -> ApplicationNote {
+        guard let session else { throw MobileAPIError.missingSession }
+        do {
+            let note = try await MobileAPIClient(serverAddress: serverAddress).updateApplicationNote(
+                id: id,
+                noteID: noteID,
+                body: body,
+                expectedUpdatedAt: expectedUpdatedAt,
+                token: session.accessToken
+            )
+            upsertApplicationNote(note, applicationID: id)
+            return note
+        } catch let error as MobileAPIError where error.statusCode == 401 {
+            await expireSession()
+            throw MobileAPIError.expiredSession
+        }
+    }
+
+    func deleteApplicationNote(id: String, noteID: String, expectedUpdatedAt: String) async throws {
+        guard let session else { throw MobileAPIError.missingSession }
+        do {
+            try await MobileAPIClient(serverAddress: serverAddress).deleteApplicationNote(
+                id: id,
+                noteID: noteID,
+                expectedUpdatedAt: expectedUpdatedAt,
+                token: session.accessToken
+            )
             if let index = applications.firstIndex(where: { $0.id == id }) {
-                applications[index] = record
+                applications[index].notes.removeAll { $0.id == noteID }
+                applicationsSavedAt = Date()
                 cacheStore.saveApplications(applications, serverAddress: serverAddress, token: session.accessToken)
             }
-        } catch { await handle(error) }
+        } catch let error as MobileAPIError where error.statusCode == 401 {
+            await expireSession()
+            throw MobileAPIError.expiredSession
+        }
     }
 
     func syncPendingCaptures() async {
@@ -359,6 +436,29 @@ final class AppModel: ObservableObject {
         capturesSavedAt = Date()
         if let session {
             cacheStore.saveCaptures(serverCaptures, serverAddress: serverAddress, token: session.accessToken)
+        }
+    }
+
+    private func upsertApplication(_ record: ApplicationRecord) {
+        if let index = applications.firstIndex(where: { $0.id == record.id }) {
+            applications[index] = record
+        } else {
+            applications.append(record)
+        }
+        applicationsSavedAt = Date()
+        if let session {
+            cacheStore.saveApplications(applications, serverAddress: serverAddress, token: session.accessToken)
+        }
+    }
+
+    private func upsertApplicationNote(_ note: ApplicationNote, applicationID: String) {
+        guard let index = applications.firstIndex(where: { $0.id == applicationID }) else { return }
+        applications[index].notes.removeAll { $0.id == note.id }
+        applications[index].notes.append(note)
+        applications[index].notes.sort { $0.createdAt < $1.createdAt }
+        applicationsSavedAt = Date()
+        if let session {
+            cacheStore.saveApplications(applications, serverAddress: serverAddress, token: session.accessToken)
         }
     }
 

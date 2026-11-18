@@ -38,11 +38,52 @@ struct MobileAPIClient {
     }
 
     func application(id: String, token: String) async throws -> ApplicationRecord {
-        var pathCharacters = CharacterSet.urlPathAllowed
-        pathCharacters.remove(charactersIn: "/?#")
-        let encodedID = id.addingPercentEncoding(withAllowedCharacters: pathCharacters) ?? id
-        let envelope: ApplicationEnvelope = try await request(path: "applications/\(encodedID)", method: "GET", token: token)
+        let envelope: ApplicationEnvelope = try await request(path: "applications/\(pathSegment(id))", method: "GET", token: token)
         return envelope.application
+    }
+
+    func updateApplicationStatus(id: String, expectedUpdatedAt: String, status: ApplicationStatus, token: String) async throws -> ApplicationRecord {
+        let payload = ApplicationUpdatePayload(expectedUpdatedAt: expectedUpdatedAt, status: status)
+        let envelope: ApplicationEnvelope = try await request(
+            path: "applications/\(pathSegment(id))",
+            method: "PATCH",
+            body: payload,
+            token: token
+        )
+        return envelope.application
+    }
+
+    func createApplicationNote(id: String, body: String, token: String) async throws -> ApplicationNote {
+        let payload = ApplicationNoteCreatePayload(body: body)
+        let envelope: ApplicationNoteEnvelope = try await request(
+            path: "applications/\(pathSegment(id))/notes",
+            method: "POST",
+            body: payload,
+            token: token
+        )
+        return envelope.note
+    }
+
+    func updateApplicationNote(id: String, noteID: String, body: String, expectedUpdatedAt: String, token: String) async throws -> ApplicationNote {
+        let payload = ApplicationNoteUpdatePayload(body: body, expectedUpdatedAt: expectedUpdatedAt)
+        let envelope: ApplicationNoteEnvelope = try await request(
+            path: "applications/\(pathSegment(id))/notes/\(pathSegment(noteID))",
+            method: "PATCH",
+            body: payload,
+            token: token
+        )
+        return envelope.note
+    }
+
+    func deleteApplicationNote(id: String, noteID: String, expectedUpdatedAt: String, token: String) async throws {
+        let payload = ApplicationNoteDeletePayload(expectedUpdatedAt: expectedUpdatedAt)
+        let response: ApplicationNoteDeleteResponse = try await request(
+            path: "applications/\(pathSegment(id))/notes/\(pathSegment(noteID))",
+            method: "DELETE",
+            body: payload,
+            token: token
+        )
+        guard response.ok else { throw MobileAPIError.invalidResponse }
     }
 
     func profile(token: String) async throws -> JSONValue {
@@ -82,6 +123,12 @@ struct MobileAPIClient {
     private func endpoint(_ relativePath: String) -> URL {
         let root = serverURL.appendingPathComponent("api/mobile/v1", isDirectory: true)
         return root.appendingPathComponent(relativePath)
+    }
+
+    private func pathSegment(_ value: String) -> String {
+        var allowed = CharacterSet.urlPathAllowed
+        allowed.remove(charactersIn: "/?#")
+        return value.addingPercentEncoding(withAllowedCharacters: allowed) ?? value
     }
 
     private func request<T: Decodable>(path: String, method: String, token: String?) async throws -> T {
