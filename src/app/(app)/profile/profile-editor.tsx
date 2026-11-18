@@ -126,6 +126,7 @@ export function ProfileEditor({
     references: listed(profile.references.length, "reference", "references", true),
     skills: listed(profile.skills.length, "skill", "skills", false),
     languages: listed(profile.languages.length, "language", "languages", true),
+    workAuthorization: listed(workAuthorizationFilled(profile.workAuthorization), "answer", "answers", true),
     facts: { ...listed(factTexts(profile.facts).length, "fact for the AI", "facts for the AI", true) },
   };
 

@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { toast } from "@/components/toast";
 import type { EntryOrder, ExperienceItem, ProfileData } from "@/lib/profile";
+import { emptyWorkAuthorization } from "@/lib/work-authorization";
 import type { RoleUsage } from "@/lib/role-usage-count";
 
 import {
@@ -190,7 +191,7 @@ describe("ExperienceSection", () => {
 
   it("shows the empty state", () => {
     function Empty() {
-      const [state, setState] = useState<ProfileData>({ basics: {} as ProfileData["basics"], skills: [], languages: [], experience: [], projects: [], education: [], certifications: [], publications: [], references: [], customSections: [], facts: [], photo: null });
+      const [state, setState] = useState<ProfileData>({ basics: {} as ProfileData["basics"], skills: [], languages: [], experience: [], projects: [], education: [], certifications: [], publications: [], references: [], customSections: [], facts: [], workAuthorization: emptyWorkAuthorization(), photo: null });
       return <ExperienceSection order="date" profile={state} update={(change) => setState(change)} usage={noUsage} />;
     }
     render(<Empty />);

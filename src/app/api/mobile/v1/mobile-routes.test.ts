@@ -127,7 +127,9 @@ describe("mobile protected routes", () => {
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ application: { id: "app-1", status: "INTERVIEW", notes: [{ id: "note-1", body: "Called John." }] } });
     expect(response.headers.get("cache-control")).toBe("no-store");
-    expect(state.applyStatusChange).toHaveBeenCalledWith(expect.anything(), "app-1", "INTERVIEW", expect.any(Date), new Date(expectedUpdatedAt));
+    expect(state.applyStatusChange).toHaveBeenCalledWith(expect.anything(), "app-1", "INTERVIEW", expect.any(Date), {
+      expectedUpdatedAt: new Date(expectedUpdatedAt),
+    });
     expect(state.getMobileApplication).toHaveBeenCalledWith("app-1");
   });
 
@@ -201,6 +203,7 @@ describe("mobile protected routes", () => {
     const profileResponse = await profile(new Request("https://dossier.test/api/mobile/v1/profile", { headers: bearer.headers }));
     expect(profileResponse.status).toBe(200);
     expect(await profileResponse.json()).toEqual({ profile: { basics: { name: "Test User" } } });
+    expect(state.getMobileProfile).toHaveBeenCalledWith();
 
     const logoutRequest = new Request("https://dossier.test/api/mobile/v1/auth/logout", {
       method: "POST",

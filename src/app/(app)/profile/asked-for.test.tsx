@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { toast } from "@/components/toast";
 import { countDemand, type Demand } from "@/lib/demand-count";
 import type { ExperienceItem, ProfileData } from "@/lib/profile";
+import { emptyWorkAuthorization } from "@/lib/work-authorization";
 
 import { addAskedSkill, hideAskedSkill, notHereAskedSkill } from "./actions";
 import { askers, AskedForCard, GapPrompt, useAskedFor } from "./asked-for";
@@ -23,7 +24,7 @@ const role: ExperienceItem = {
 };
 const empty: ProfileData = {
   basics: {} as ProfileData["basics"], skills: [{ id: "s1", name: "Figma", group: "" }], languages: [], experience: [role], projects: [], education: [],
-  certifications: [], publications: [], references: [], customSections: [], facts: [], photo: null,
+  certifications: [], publications: [], references: [], customSections: [], facts: [], workAuthorization: emptyWorkAuthorization(), photo: null,
 };
 const posting = (company: string, ...skills: string[]) => ({ company, asks: skills.map((skill) => ({ skill, covered: false })) });
 const many = countDemand([

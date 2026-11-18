@@ -133,6 +133,7 @@ export async function getMobileApplication(id: string): Promise<MobileApplicatio
   };
 }
 
+/** V1 has no profile selector; details use the first profile, like Basics. */
 export async function getMobileProfile(): Promise<MobileProfile> {
   return loadProfile();
 }

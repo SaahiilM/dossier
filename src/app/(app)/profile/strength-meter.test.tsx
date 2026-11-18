@@ -41,7 +41,7 @@ describe("StrengthMeter's hint (E33-1)", () => {
     const full = { ...basics, name: "Jane", email: "jane@example.com", city: "Rotterdam", country: "Netherlands", headline: "Designer", summary: "Designs." };
     render(
       <StrengthMeter
-        profile={{ basics: full, skills: [], languages: [], experience: [{ bullets: "Led it" } as never, { bullets: "" } as never], projects: [], education: [], certifications: [], publications: [], references: [], customSections: [], facts: [], photo: null }}
+        profile={{ basics: full, skills: [], languages: [], experience: [{ bullets: "Led it" } as never, { bullets: "" } as never], projects: [], education: [], certifications: [], publications: [], references: [], customSections: [], facts: [], workAuthorization: emptyWorkAuthorization(), photo: null }}
       />,
     );
     expect(screen.getByRole("progressbar", { name: "Profile strength" })).toHaveAccessibleDescription("Good progress. One role has no lines yet.");

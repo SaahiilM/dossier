@@ -134,4 +134,4 @@ export function sectionFromParam(value: string | string[] | undefined, customSec
 export const sectionHref = (id: ProfilePage, profileId?: string) => `/profile?section=${id}${profileId ? `&profile=${profileId}` : ""}`;
 
 /** Sections every profile shares (E33-1): the nav tags them "All profiles". */
-export const SHARED_SECTIONS: ReadonlySet<string> = new Set(["basics", "languages", "facts"]);
+export const SHARED_SECTIONS: ReadonlySet<string> = new Set(["basics", "languages", "workAuthorization", "facts"]);

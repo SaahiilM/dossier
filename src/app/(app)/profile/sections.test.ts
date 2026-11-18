@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { BUILT_IN_SECTIONS } from "@/lib/resume-sections";
 
-import { navSections, SECTIONS, sectionFromParam, sectionHref } from "./sections";
+import { navSections, SECTIONS, sectionFromParam, sectionHref, SHARED_SECTIONS } from "./sections";
 
 describe("profile sections", () => {
   it("start in a resume's usual order, between Basics and Facts about me", () => {
@@ -20,6 +20,10 @@ describe("profile sections", () => {
       "workAuthorization",
       "facts",
     ]);
+  });
+
+  it("marks shared work authorization alongside the other all-profile sections", () => {
+    expect(SHARED_SECTIONS.has("workAuthorization")).toBe(true);
   });
 
   it("list in the order given, with a section the user made above References", () => {
