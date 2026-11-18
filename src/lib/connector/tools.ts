@@ -4,9 +4,9 @@ import { McpServer, type CallToolResult } from "@modelcontextprotocol/server";
 import { z } from "zod";
 
 import { AgentCandidateStatus, ApplicationStatus, DocumentKind } from "@/generated/prisma/enums";
-import { stringsOf } from "@/lib/agent/candidates";
+import { candidateCoverage, stringsOf } from "@/lib/agent/candidates";
 import { approveCandidate } from "@/lib/agent/draft";
-import { agentQueueFitSummary, countAgentQueue, loadAgentView } from "@/lib/agent/view";
+import { countAgentQueue, loadAgentView } from "@/lib/agent/view";
 import { ActionError } from "@/lib/action";
 import { DASHBOARD_PERIODS, type DashboardPeriod } from "@/lib/dashboard";
 import { loadDashboard } from "@/lib/dashboard-data";
@@ -14,7 +14,7 @@ import { updateDocuments } from "@/lib/document-units";
 import { isAiUsable } from "@/lib/ai/config";
 import { profileForPrompt } from "@/lib/ai/tasks/prompt-parts";
 import { unitsSchema } from "@/lib/application-data";
-import { fitBand, fitFrom } from "@/lib/fit";
+import { fitBand, fitFrom, parsePostingFitMeta } from "@/lib/fit";
 import { countryCodeFor, countryName } from "@/lib/job-search/countries";
 import { fullText } from "@/lib/job-search/find";
 import {
@@ -31,7 +31,7 @@ import {
   type ShownPosting,
 } from "@/lib/job-search/search";
 import { getJob, startJob } from "@/lib/jobs/runner";
-import { withoutPrivateParts } from "@/lib/letter-frame";
+import { isFrameUnit, isPrivateFrameUnit, withFrame, withoutPrivateParts } from "@/lib/letter-frame";
 import { FETCH_MESSAGES, fetchPosting } from "@/lib/posting-fetch";
 import { saveScore } from "@/lib/posting-scores";
 import { postingsOfSearch } from "@/lib/library";
@@ -43,6 +43,8 @@ import { withoutSectionsOff } from "@/lib/resume-sections";
 import { listProfiles, loadProfileSettings, profileNamed } from "@/lib/profiles";
 import { statusInfo } from "@/lib/status";
 import { applyStatusChange } from "@/lib/status-changes";
+import { cleanUnitText } from "@/lib/unit-text";
+import { loadSettings } from "@/lib/settings-data";
 import { appVersion } from "@/lib/version";
 
 import { connectorDraftJob } from "./draft";
@@ -112,7 +114,6 @@ const CONNECTOR_DOCUMENTS = [DocumentKind.RESUME, DocumentKind.COVER_LETTER] as 
 type ConnectorDocument = (typeof CONNECTOR_DOCUMENTS)[number];
 
 const AGENT_QUEUE_SECTIONS = ["drafts", "scored", "below_minimum"] as const;
-type AgentQueueSection = (typeof AGENT_QUEUE_SECTIONS)[number];
 
 const agentStatusLabel = (status: AgentCandidateStatus) =>
   status === AgentCandidateStatus.DRAFTED ? "Awaiting your review" : status === AgentCandidateStatus.DRAFTING ? "Drafting" : "Scored";
@@ -123,7 +124,7 @@ const actionFailure = (error: unknown): CallToolResult =>
 
 /** Units an MCP client may edit: not contact frame parts. */
 function assertEditableUnit(_document: ConnectorDocument, unitId: string): string | null {
-  if (PRIVATE_FRAME_UNITS.has(unitId)) return "That part has contact details. Edit it in Dossier.";
+  if (isPrivateFrameUnit(unitId)) return "That part has contact details. Edit it in Dossier.";
   return null;
 }
 
@@ -633,7 +634,7 @@ export function createDossierServer(origin: string): McpServer {
         sent: figures.sent,
         heard_back: figures.heardBack,
         heard_back_percent: figures.heardBackPercent,
-        attention: figures.attention.slice(0, 20).map((item) => ({
+        attention: figures.needsYou.slice(0, 20).map((item) => ({
           id: item.id,
           company: item.company,
           role: item.role,
@@ -656,19 +657,16 @@ export function createDossierServer(origin: string): McpServer {
       annotations: { readOnlyHint: true },
     },
     async () => {
-      const [view, queue, fitSummary] = await Promise.all([loadAgentView(), countAgentQueue(), agentQueueFitSummary()]);
+      const [view, queue] = await Promise.all([loadAgentView(), countAgentQueue()]);
       return text({
         enabled: view.enabled,
         auto_draft: view.autoDraft,
-        min_score: view.minScore,
+        minimum_coverage: view.covers,
         queue_badge: queue,
-        queue_score_stale: fitSummary.stale,
-        queue_needs_review: fitSummary.needsReview,
-        queue_auto_draft_blocked: fitSummary.autoDraftBlocked,
         drafts_awaiting_review: view.drafts.length,
-        scored_in_queue: view.scored.length,
-        below_minimum: view.belowMinimum.length,
-        source_requests_used_24h: view.sourceRequestsUsed,
+        scored_in_queue: view.finds.length,
+        below_minimum: view.skipped.filter((candidate) => candidate.coverage.total > 0).length,
+        source_requests_used_24h: view.budget.reduce((total, portal) => total + portal.used, 0),
         limit_reached: view.limitReached,
         setup_problem: view.setupProblem,
         last_run: view.lastRun,
@@ -684,7 +682,7 @@ export function createDossierServer(origin: string): McpServer {
     {
       title: "List job agent candidates",
       description:
-        "Postings the job agent scored or drafted: drafts (awaiting your review), scored (at or above the minimum score, not yet drafted), or below_minimum. Newest scores first.",
+        "Postings the job agent scored or drafted: drafts (awaiting your review), scored (meets the minimum coverage, not yet drafted), or below_minimum.",
       inputSchema: z.object({
         section: z.enum(AGENT_QUEUE_SECTIONS).describe("drafts, scored or below_minimum"),
         limit: z.number().int().min(1).max(50).optional(),
@@ -692,24 +690,15 @@ export function createDossierServer(origin: string): McpServer {
       annotations: { readOnlyHint: true },
     },
     async ({ section, limit }) => {
-      const [settings, profile, config] = await Promise.all([loadSettings(), loadProfile(), loadScoringConfig()]);
-      const { agentMinScore } = settings;
-      const take = limit ?? 30;
-      const now = new Date();
-      const rows = await prisma.agentCandidate.findMany({
-        where:
-          section === "drafts"
-            ? { status: AgentCandidateStatus.DRAFTED, applicationId: { not: null } }
-            : section === "scored"
-              ? { status: { in: [AgentCandidateStatus.SCORED, AgentCandidateStatus.DRAFTING] }, score: { gte: agentMinScore } }
-              : { status: { in: [AgentCandidateStatus.SCORED, AgentCandidateStatus.DRAFTING] }, score: { lt: agentMinScore } },
-        orderBy: [{ score: "desc" }, { createdAt: "desc" }],
-        take,
-      });
+      const view = await loadAgentView();
+      const candidates = section === "drafts" ? view.drafts : section === "scored" ? view.finds : view.skipped.filter((candidate) => candidate.coverage.total > 0);
+      const ids = candidates.slice(0, limit ?? 30).map((candidate) => candidate.id);
+      const found = await prisma.agentCandidate.findMany({ where: { id: { in: ids } } });
+      const byId = new Map(found.map((row) => [row.id, row]));
+      const rows = ids.flatMap((id) => byId.get(id) ?? []);
       return text({
         section,
         candidates: rows.map((row) => {
-          const fit = postingFitFromCandidate(row, profile, config, now);
           const meta = parsePostingFitMeta(row.meta);
           return {
             id: row.id,
@@ -718,9 +707,9 @@ export function createDossierServer(origin: string): McpServer {
             place: row.place || undefined,
             score: row.score,
             status: agentStatusLabel(row.status),
-            score_stale: fit.stale === true,
+            coverage: candidateCoverage(row),
             score_review: meta?.review,
-            auto_draft_blocked: fit.stale === true || meta?.blockAutoDraft === true,
+            auto_draft_blocked: row.mustMissing > 0 || row.requirements === 0 || meta?.blockAutoDraft === true,
             application_id: row.applicationId ?? undefined,
             posting: row.url || undefined,
             link: linkTo("/agent"),
@@ -743,8 +732,6 @@ export function createDossierServer(origin: string): McpServer {
     async ({ id }) => {
       const candidate = await prisma.agentCandidate.findUnique({ where: { id } });
       if (!candidate || candidate.status === AgentCandidateStatus.DISMISSED) return failure("That posting is no longer in the agent's queue.");
-      const [profile, config] = await Promise.all([loadProfile(), loadScoringConfig()]);
-      const fit = postingFitFromCandidate(candidate, profile, config, new Date());
       const meta = parsePostingFitMeta(candidate.meta);
       const payload: Record<string, unknown> = {
         id: candidate.id,
@@ -752,9 +739,9 @@ export function createDossierServer(origin: string): McpServer {
         company: candidate.company,
         place: candidate.place || undefined,
         score: candidate.score,
-        score_stale: fit.stale === true,
+        coverage: candidateCoverage(candidate),
         score_review: meta?.review,
-        auto_draft_blocked: fit.stale === true || meta?.blockAutoDraft === true,
+        auto_draft_blocked: candidate.mustMissing > 0 || candidate.requirements === 0 || meta?.blockAutoDraft === true,
         status: agentStatusLabel(candidate.status),
         reasons: stringsOf(candidate.reasons),
         red_flags: stringsOf(candidate.redFlags),
@@ -819,7 +806,7 @@ export function createDossierServer(origin: string): McpServer {
 
       const application = await prisma.application.findUnique({ where: { id }, select: { status: true, awaitingReview: true } });
       if (!application) return failure("That application no longer exists.");
-      if (application.awaitingReview) return failure("That draft is still on the Agent screen. Call approve_agent_candidate first, or edit it with get_agent_candidate only.");
+      if (application.awaitingReview) return failure("That draft is still on the Agent screen. Approve it before editing it here.");
       if (application.status !== ApplicationStatus.DRAFT) return failure("Only Draft applications can be edited through the connector.");
 
       const clean = cleanUnitText(unit_id, raw);

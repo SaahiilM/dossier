@@ -20,6 +20,8 @@ export const FRAME_LABELS: Frame = { sender: "Sender", date: "Date", recipient: 
 /** Parts with contact details: never sent to an AI model. */
 const PRIVATE_FRAME_UNITS: ReadonlySet<string> = new Set<FrameUnitId>(["sender", "signature"]);
 
+export const isPrivateFrameUnit = (id: string): boolean => PRIVATE_FRAME_UNITS.has(id);
+
 /** Parts the AI writes, in the letter's language, and can write again. */
 export const WRITTEN_FRAME_UNITS: ReadonlySet<string> = new Set<FrameUnitId>(["recipient", "greeting"]);
 
@@ -118,5 +120,5 @@ export function letterText(parts: Unit[], signOff: string): string {
 
 /** The units without the parts that hold contact details, for AI prompts. */
 export function withoutPrivateParts(units: Unit[]): Unit[] {
-  return units.filter((unit) => !PRIVATE_FRAME_UNITS.has(unit.id));
+  return units.filter((unit) => !isPrivateFrameUnit(unit.id));
 }
