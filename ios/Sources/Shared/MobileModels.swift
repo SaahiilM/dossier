@@ -62,6 +62,86 @@ struct ApplicationEnvelope: Decodable {
     let application: ApplicationRecord
 }
 
+struct ApplicationNoteEnvelope: Decodable {
+    let note: ApplicationNote
+}
+
+struct ApplicationNoteDeleteResponse: Decodable {
+    let ok: Bool
+}
+
+enum ApplicationStatus: String, Codable, CaseIterable, Identifiable {
+    case draft = "DRAFT"
+    case sent = "SENT"
+    case screening = "SCREENING"
+    case interview = "INTERVIEW"
+    case offer = "OFFER"
+    case accepted = "ACCEPTED"
+    case rejected = "REJECTED"
+    case declined = "DECLINED"
+
+    var id: String { rawValue }
+
+    var title: String {
+        rawValue.lowercased().capitalized
+    }
+}
+
+struct ApplicationUpdatePayload: Encodable {
+    let expectedUpdatedAt: String
+    let status: ApplicationStatus
+}
+
+struct ApplicationNoteCreatePayload: Encodable {
+    let body: String
+}
+
+struct ApplicationNoteUpdatePayload: Encodable {
+    let body: String
+    let expectedUpdatedAt: String
+}
+
+struct ApplicationNoteDeletePayload: Encodable {
+    let expectedUpdatedAt: String
+}
+
+struct ApplicationNote: Codable, Identifiable, Hashable {
+    var id: String
+    var body: String
+    var createdAt: Date
+    var updatedAt: Date
+    var updatedAtString: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id, body, createdAt, updatedAt
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        body = try c.decode(String.self, forKey: .body)
+        createdAt = try c.decode(Date.self, forKey: .createdAt)
+        updatedAt = try c.decode(Date.self, forKey: .updatedAt)
+        updatedAtString = try c.decodeIfPresent(String.self, forKey: .updatedAt)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(id, forKey: .id)
+        try c.encode(body, forKey: .body)
+        try c.encode(createdAt, forKey: .createdAt)
+        if let updatedAtString {
+            try c.encode(updatedAtString, forKey: .updatedAt)
+        } else {
+            try c.encode(updatedAt, forKey: .updatedAt)
+        }
+    }
+
+    var expectedUpdatedAt: String {
+        updatedAtString ?? MobileDateCoding.isoString(updatedAt)
+    }
+}
+
 struct ProfileEnvelope: Decodable {
     let profile: JSONValue
 }
@@ -128,10 +208,12 @@ struct ApplicationRecord: Codable, Identifiable, Hashable {
     var deadline: String?
     var url: String?
     var descriptionText: String?
-    var notes: String?
+    var notes: [ApplicationNote]
+    var legacyNotes: String?
     var createdAt: Date?
     var sentAt: Date?
     var updatedAt: Date?
+    var updatedAtString: String?
     var interviewAt: Date?
     var language: String?
     var score: Int?
@@ -178,11 +260,23 @@ struct ApplicationRecord: Codable, Identifiable, Hashable {
             ?? c.decodeIfPresent(String.self, forKey: .postingUrl)
         descriptionText = try c.decodeIfPresent(String.self, forKey: .description)
             ?? c.decodeIfPresent(String.self, forKey: .postingText)
-        notes = try c.decodeIfPresent(String.self, forKey: .notes)
+        if c.contains(.notes), (try? c.decodeNil(forKey: .notes)) != true {
+            if let entries = try? c.decode([ApplicationNote].self, forKey: .notes) {
+                notes = entries
+                legacyNotes = nil
+            } else {
+                notes = []
+                legacyNotes = try? c.decode(String.self, forKey: .notes)
+            }
+        } else {
+            notes = []
+            legacyNotes = nil
+        }
         createdAt = try c.decodeIfPresent(Date.self, forKey: .createdAt)
             ?? c.decodeIfPresent(Date.self, forKey: .appliedAt)
         sentAt = try c.decodeIfPresent(Date.self, forKey: .sentAt)
         updatedAt = try c.decodeIfPresent(Date.self, forKey: .updatedAt)
+        updatedAtString = try c.decodeIfPresent(String.self, forKey: .updatedAt)
         interviewAt = try c.decodeIfPresent(Date.self, forKey: .interviewAt)
             ?? c.decodeIfPresent(Date.self, forKey: .nextInterviewAt)
             ?? c.decodeIfPresent(Date.self, forKey: .interviewDate)
@@ -213,10 +307,18 @@ struct ApplicationRecord: Codable, Identifiable, Hashable {
         try c.encodeIfPresent(deadline, forKey: .deadline)
         try c.encodeIfPresent(url, forKey: .url)
         try c.encodeIfPresent(descriptionText, forKey: .description)
-        try c.encodeIfPresent(notes, forKey: .notes)
+        if let legacyNotes, notes.isEmpty {
+            try c.encode(legacyNotes, forKey: .notes)
+        } else {
+            try c.encode(notes, forKey: .notes)
+        }
         try c.encodeIfPresent(createdAt, forKey: .createdAt)
         try c.encodeIfPresent(sentAt, forKey: .sentAt)
-        try c.encodeIfPresent(updatedAt, forKey: .updatedAt)
+        if let updatedAtString {
+            try c.encode(updatedAtString, forKey: .updatedAt)
+        } else {
+            try c.encodeIfPresent(updatedAt, forKey: .updatedAt)
+        }
         try c.encodeIfPresent(interviewAt, forKey: .interviewAt)
         try c.encodeIfPresent(language, forKey: .language)
         try c.encodeIfPresent(score, forKey: .score)
@@ -229,6 +331,10 @@ struct ApplicationRecord: Codable, Identifiable, Hashable {
 
     static func == (lhs: ApplicationRecord, rhs: ApplicationRecord) -> Bool { lhs.id == rhs.id }
     func hash(into hasher: inout Hasher) { hasher.combine(id) }
+
+    var expectedUpdatedAt: String? {
+        updatedAtString ?? updatedAt.map(MobileDateCoding.isoString)
+    }
 }
 
 indirect enum JSONValue: Decodable, Encodable, Hashable {
