@@ -24,9 +24,12 @@ export function PageHeader({ title, description, actions, before, breadcrumb }: 
   return (
     <>
       <PageBar>
-        <div className="flex min-w-0 basis-full items-center gap-2 md:basis-auto md:flex-1 sm:gap-3">
-          {before ?? <PageBarIcon />}
-          <h1 className="min-w-0 break-words font-serif text-[28px] leading-tight sm:text-title text-pretty">{title}</h1>
+        <div className="flex min-w-0 basis-full flex-col gap-1 md:basis-auto md:flex-1">
+          {breadcrumb && <Breadcrumb items={breadcrumb} />}
+          <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+            {before ?? <PageBarIcon />}
+            <h1 className="min-w-0 break-words font-serif text-[28px] leading-tight text-pretty sm:text-title">{title}</h1>
+          </div>
         </div>
         {actions && <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">{actions}</div>}
       </PageBar>
@@ -51,7 +54,13 @@ export function PageBar({ children, compact = false }: { children: ReactNode; /*
     // pt-2: the shell's 8px above the panel, as at its sides and bottom; it
     // stays while the bar sticks, so nothing scrolls by above it.
     <div className="sticky top-0 z-20 -mx-px bg-paper pt-0 sm:pt-2">
-      <div className="flex min-h-12 flex-wrap items-center justify-between gap-x-3 gap-y-2 rounded-t-panel border border-b-0 border-line-card bg-surface px-4 pt-4 pb-3 sm:gap-x-6 sm:gap-y-3 sm:px-10 sm:pt-7 sm:pb-4">
+      <div
+        className={
+          compact
+            ? "flex min-h-12 flex-wrap items-center gap-x-3 gap-y-2 rounded-t-panel border border-line-card border-b-line bg-surface px-4 py-3 sm:gap-x-6 sm:gap-y-3 sm:px-7 sm:py-[18px]"
+            : "flex min-h-12 flex-wrap items-center justify-between gap-x-3 gap-y-2 rounded-t-panel border border-b-0 border-line-card bg-surface px-4 pt-4 pb-3 sm:gap-x-6 sm:gap-y-3 sm:px-10 sm:pt-7 sm:pb-4"
+        }
+      >
         {children}
       </div>
     </div>

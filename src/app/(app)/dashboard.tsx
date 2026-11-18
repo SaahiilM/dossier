@@ -59,7 +59,7 @@ export function Dashboard({
   return (
     <>
       <header className="-mx-px bg-paper pt-2">
-        <div className="flex flex-col gap-1 rounded-t-panel border border-b-0 border-line-card bg-surface px-12 pt-7">
+        <div className="flex flex-col gap-1 rounded-t-panel border border-b-0 border-line-card bg-surface px-4 pt-5 sm:px-12 sm:pt-7">
           {note !== undefined && note !== "hidden" && (
             <div className="pb-6">
               <DailyNote initial={note} />
@@ -78,7 +78,7 @@ export function Dashboard({
         </div>
       </header>
 
-      <div className="@container px-12 pt-7 pb-[72px]">
+      <div className="@container px-4 pt-6 pb-8 sm:px-12 sm:pt-7 sm:pb-[72px]">
         <div className="grid grid-cols-[minmax(0,1fr)] items-start gap-6 @min-[1500px]:grid-cols-[minmax(0,1fr)_580px]">
           {empty ? (
             <Welcome />

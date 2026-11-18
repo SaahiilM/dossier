@@ -156,7 +156,7 @@ export function Board({
     >
       {/* Relative, so screen-reader-only text inside is clipped with the rest
           instead of widening the page. */}
-      <div className="relative min-h-0 flex-1 overflow-x-auto overflow-y-hidden px-10 pt-1.5 pb-5">
+      <div className="relative min-h-0 flex-1 overflow-x-auto overflow-y-hidden px-4 pt-1.5 pb-5 sm:px-10">
         <div className="flex h-full min-w-full items-stretch gap-3">
           {statuses.map((status) => {
             const cards = orderedColumn(rows, status);
