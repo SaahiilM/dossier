@@ -86,6 +86,54 @@ struct MobileAPIClient {
         guard response.ok else { throw MobileAPIError.invalidResponse }
     }
 
+    func applicationDocuments(id: String, token: String) async throws -> MobileApplicationDocumentsEnvelope {
+        let encodedID = try encodedApplicationID(id)
+        let url = try applicationDocumentsEndpoint(encodedID: encodedID, suffix: "")
+        let envelope: MobileApplicationDocumentsEnvelope = try await request(url: url, method: "GET", token: token)
+        guard envelope.applicationId == id,
+              envelope.documents.resume?.kind == nil || envelope.documents.resume?.kind == .resume,
+              envelope.documents.coverLetter?.kind == nil || envelope.documents.coverLetter?.kind == .coverLetter else {
+            throw MobileAPIError.invalidResponse
+        }
+        return envelope
+    }
+
+    /// Fetches a PDF from a route built from the configured server and typed document kind.
+    /// The server's JSON `pdfUrl` field is deliberately not used by the native client.
+    func documentPDF(applicationID: String, kind: MobileDocumentKind, token: String) async throws -> MobilePDFResponse {
+        let encodedID = try encodedApplicationID(applicationID)
+        let url = try applicationDocumentsEndpoint(encodedID: encodedID, suffix: "/\(kind.rawValue)/pdf")
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.timeoutInterval = 25
+        request.setValue("application/pdf", forHTTPHeaderField: "Accept")
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+
+        let data: Data
+        let response: URLResponse
+        do {
+            // Refuse redirects so an authenticated request can never be forwarded to a
+            // URL supplied by the server or a third-party host.
+            (data, response) = try await session.data(for: request, delegate: RejectPDFRedirects())
+        } catch let error as URLError where error.code == .cancelled {
+            throw error
+        } catch {
+            throw MobileAPIError.network(Self.friendlyNetworkMessage(error))
+        }
+
+        guard let http = response as? HTTPURLResponse else { throw MobileAPIError.invalidResponse }
+        guard (200..<300).contains(http.statusCode) else {
+            if let envelope = try? MobileDateCoding.decoder().decode(APIErrorEnvelope.self, from: data) {
+                throw MobileAPIError.server(code: envelope.error.code, message: envelope.error.message, status: http.statusCode)
+            }
+            throw MobileAPIError.server(code: "http_\(http.statusCode)", message: "Dossier could not complete that request (\(http.statusCode)).", status: http.statusCode)
+        }
+        guard http.mimeType?.lowercased() == "application/pdf", data.starts(with: Data("%PDF-".utf8)) else {
+            throw MobileAPIError.invalidResponse
+        }
+        return MobilePDFResponse(data: data, suggestedFilename: response.suggestedFilename)
+    }
+
     func profile(token: String) async throws -> JSONValue {
         let envelope: ProfileEnvelope = try await request(path: "profile", method: "GET", token: token)
         return envelope.profile
@@ -129,6 +177,27 @@ struct MobileAPIClient {
         var allowed = CharacterSet.urlPathAllowed
         allowed.remove(charactersIn: "/?#")
         return value.addingPercentEncoding(withAllowedCharacters: allowed) ?? value
+    }
+
+    private func encodedApplicationID(_ id: String) throws -> String {
+        guard !id.isEmpty, id.count <= 128 else { throw MobileAPIError.invalidResponse }
+        var pathCharacters = CharacterSet.urlPathAllowed
+        pathCharacters.remove(charactersIn: "/?#%")
+        guard let encoded = id.addingPercentEncoding(withAllowedCharacters: pathCharacters) else {
+            throw MobileAPIError.invalidResponse
+        }
+        return encoded
+    }
+
+    private func applicationDocumentsEndpoint(encodedID: String, suffix: String) throws -> URL {
+        guard var components = URLComponents(url: serverURL, resolvingAgainstBaseURL: false) else {
+            throw MobileAPIError.invalidServerURL
+        }
+        let serverPath = components.percentEncodedPath.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        let basePath = serverPath.isEmpty ? "" : "/\(serverPath)"
+        components.percentEncodedPath = "\(basePath)/api/mobile/v1/applications/\(encodedID)/documents\(suffix)"
+        guard let url = components.url else { throw MobileAPIError.invalidServerURL }
+        return url
     }
 
     private func request<T: Decodable>(path: String, method: String, token: String?) async throws -> T {
@@ -188,6 +257,18 @@ struct MobileAPIClient {
             }
         }
         return "Could not reach Dossier. Check your connection and try again."
+    }
+}
+
+private final class RejectPDFRedirects: NSObject, URLSessionTaskDelegate {
+    func urlSession(
+        _ session: URLSession,
+        task: URLSessionTask,
+        willPerformHTTPRedirection response: HTTPURLResponse,
+        newRequest request: URLRequest,
+        completionHandler: @escaping (URLRequest?) -> Void
+    ) {
+        completionHandler(nil)
     }
 }
 
