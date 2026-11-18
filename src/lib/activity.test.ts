@@ -19,9 +19,9 @@ describe("activityTimeline (E8-9)", () => {
       now: at(5),
     });
     expect(timeline).toEqual([
-      { kind: "note", id: "n1", body: "Called John.", date: "3 Oct", edited: false },
+      { kind: "note", id: "n1", body: "Called John.", date: "3 Oct", edited: false, updatedAt: at(3, 15).toISOString() },
       { kind: "status", id: "e2", status: "INTERVIEW", date: "3 Oct" },
-      { kind: "note", id: "n2", body: "Sent a thank-you.", date: "1 Oct", edited: true },
+      { kind: "note", id: "n2", body: "Sent a thank-you.", date: "1 Oct", edited: true, updatedAt: at(2).toISOString() },
       { kind: "status", id: "e1", status: "SENT", date: "1 Oct" },
       { kind: "created", id: "created", date: "1 Oct" },
     ]);

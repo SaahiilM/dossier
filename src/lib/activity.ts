@@ -6,7 +6,7 @@ import { formatShortDate } from "@/lib/dates";
 // formatted here, on the server.
 
 export type ActivityEntry =
-  | { kind: "note"; id: string; body: string; date: string; edited: boolean }
+  | { kind: "note"; id: string; body: string; date: string; edited: boolean; updatedAt: string }
   | { kind: "status"; id: string; status: ApplicationStatus; date: string }
   | { kind: "created"; id: "created"; date: string };
 
@@ -33,6 +33,7 @@ export function activityTimeline({
         body: note.body,
         date: formatShortDate(note.createdAt, now),
         edited: note.updatedAt.getTime() - note.createdAt.getTime() > EDIT_AFTER_MS,
+        updatedAt: note.updatedAt.toISOString(),
       },
     })),
     ...events.map((event) => ({

@@ -17,7 +17,7 @@ import { addNote, deleteNote, restoreNote, updateNote } from "./actions";
  */
 export function NotesTab({ applicationId, activity }: { applicationId: string; activity: ActivityEntry[] }) {
   const [draft, setDraft] = useState("");
-  const [editing, setEditing] = useState<{ id: string; body: string } | null>(null);
+  const [editing, setEditing] = useState<{ id: string; body: string; updatedAt: string } | null>(null);
   const [pending, startTransition] = useTransition();
   const draftId = useId();
 
@@ -33,16 +33,16 @@ export function NotesTab({ applicationId, activity }: { applicationId: string; a
   const save = () => {
     if (!editing || pending) return;
     startTransition(async () => {
-      const result = await updateNote({ id: applicationId, noteId: editing.id, body: editing.body });
+      const result = await updateNote({ id: applicationId, noteId: editing.id, body: editing.body, expectedUpdatedAt: editing.updatedAt });
       if (!result.ok) return toast(result.error);
       setEditing(null);
     });
   };
 
   // Gone at once, with Undo on the toast (as in the profile).
-  const remove = (noteId: string) =>
+  const remove = (noteId: string, expectedUpdatedAt: string) =>
     startTransition(async () => {
-      const result = await deleteNote({ id: applicationId, noteId });
+      const result = await deleteNote({ id: applicationId, noteId, expectedUpdatedAt });
       if (!result.ok) return toast(result.error);
       toast("Note deleted.", {
         action: {
@@ -106,7 +106,7 @@ export function NotesTab({ applicationId, activity }: { applicationId: string; a
                         autoFocus
                         rows={Math.max(3, editing.body.split("\n").length + 1)}
                         value={editing.body}
-                        onChange={(event) => setEditing({ id: entry.id, body: event.target.value })}
+                        onChange={(event) => setEditing({ id: entry.id, body: event.target.value, updatedAt: editing.updatedAt })}
                         onKeyDown={(event) => {
                           if (event.key === "Escape") setEditing(null);
                           else if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
@@ -137,7 +137,7 @@ export function NotesTab({ applicationId, activity }: { applicationId: string; a
                           type="button"
                           aria-label={`Edit the note from ${entry.date}`}
                           className="hover:text-ink"
-                          onClick={() => setEditing({ id: entry.id, body: entry.body })}
+                          onClick={() => setEditing({ id: entry.id, body: entry.body, updatedAt: entry.updatedAt })}
                         >
                           Edit
                         </button>
@@ -145,7 +145,7 @@ export function NotesTab({ applicationId, activity }: { applicationId: string; a
                           type="button"
                           aria-label={`Delete the note from ${entry.date}`}
                           className="text-danger hover:text-error-strong"
-                          onClick={() => remove(entry.id)}
+                          onClick={() => remove(entry.id, entry.updatedAt)}
                         >
                           Delete
                         </button>

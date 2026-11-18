@@ -574,12 +574,23 @@ describe("notes (E8-9)", () => {
     const [note] = await notes();
     expect(note.body).toBe("Called John.");
 
-    expect(await updateNote({ id: "app-1", noteId: note.id, body: "Called John; second round next week." })).toEqual({ ok: true, data: null });
+    expect(await updateNote({ id: "app-1", noteId: note.id, body: "Called John; second round next week.", expectedUpdatedAt: note.updatedAt.toISOString() })).toEqual({ ok: true, data: null });
     const [edited] = await notes();
     expect(edited.body).toBe("Called John; second round next week.");
     expect(edited.updatedAt.getTime()).toBeGreaterThan(note.updatedAt.getTime());
 
-    const deleted = await deleteNote({ id: "app-1", noteId: note.id });
+    expect(await updateNote({ id: "app-1", noteId: note.id, body: "Stale change", expectedUpdatedAt: note.updatedAt.toISOString() })).toMatchObject({
+      ok: false,
+      error: "This note changed since you opened it. Reload it before saving.",
+    });
+    expect((await notes())[0].body).toBe("Called John; second round next week.");
+    expect(await deleteNote({ id: "app-1", noteId: note.id, expectedUpdatedAt: note.updatedAt.toISOString() })).toMatchObject({
+      ok: false,
+      error: "This note changed since you opened it. Reload it before deleting.",
+    });
+    expect(await notes()).toHaveLength(1);
+
+    const deleted = await deleteNote({ id: "app-1", noteId: note.id, expectedUpdatedAt: edited.updatedAt.toISOString() });
     expect(deleted).toEqual({
       ok: true,
       data: { body: edited.body, createdAt: edited.createdAt.toISOString(), updatedAt: edited.updatedAt.toISOString() },
@@ -596,8 +607,9 @@ describe("notes (E8-9)", () => {
 
   it("only touches this application's notes", async () => {
     await prisma().application.create({ data: { id: "app-2", notes: { create: { id: "other", body: "Theirs" } } } });
-    expect(await updateNote({ id: "app-1", noteId: "other", body: "Mine" })).toEqual({ ok: false, error: "That note no longer exists." });
-    expect(await deleteNote({ id: "app-1", noteId: "other" })).toEqual({ ok: false, error: "That note no longer exists." });
+    const expectedUpdatedAt = new Date().toISOString();
+    expect(await updateNote({ id: "app-1", noteId: "other", body: "Mine", expectedUpdatedAt })).toEqual({ ok: false, error: "That note no longer exists." });
+    expect(await deleteNote({ id: "app-1", noteId: "other", expectedUpdatedAt })).toEqual({ ok: false, error: "That note no longer exists." });
   });
 });
 

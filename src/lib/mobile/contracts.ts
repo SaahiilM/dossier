@@ -24,6 +24,13 @@ export type MobileApplicationSummary = {
   updatedAt: string;
 };
 
+export type MobileApplicationNote = {
+  id: string;
+  body: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type MobileApplication = {
   id: string;
   title: string;
@@ -42,6 +49,7 @@ export type MobileApplication = {
   nextInterviewAt: string | null;
   createdAt: string;
   updatedAt: string;
+  notes: MobileApplicationNote[];
   extracted: Extracted;
   match: Match | null;
 };

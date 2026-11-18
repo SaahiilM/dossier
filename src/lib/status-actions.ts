@@ -34,6 +34,7 @@ export const setStatus = action(
     }
     const result = await applyStatusChange(prisma, id, to);
     if (result.outcome === "not-found") throw new ActionError(NOT_FOUND);
+    if (result.outcome === "conflict") throw new ActionError("That application changed. Reload it before changing its status.");
     if (result.outcome === "unchanged") return { eventId: null };
 
     refreshEverything();

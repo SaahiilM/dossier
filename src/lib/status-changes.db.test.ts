@@ -40,6 +40,23 @@ describe("applyStatusChange", () => {
     expect(await applyStatusChange(db, "missing", "SENT", t(0))).toEqual({ outcome: "not-found" });
   });
 
+  it("applies only when the application version matches, with a conflict for stale edits", async () => {
+    const { id } = await db.application.create({ data: { updatedAt: t(0) } });
+    expect(await applyStatusChange(db, id, "SENT", t(1), t(0))).toMatchObject({ outcome: "changed" });
+    const current = await db.application.findUniqueOrThrow({ where: { id }, select: { updatedAt: true, status: true } });
+    await db.application.update({ where: { id }, data: { updatedAt: t(3) } });
+
+    expect(await applyStatusChange(db, id, "INTERVIEW", t(4), current.updatedAt)).toEqual({ outcome: "conflict" });
+    expect(await db.application.findUniqueOrThrow({ where: { id }, select: { status: true } })).toEqual({ status: "SENT" });
+    expect(await db.statusEvent.count({ where: { applicationId: id } })).toBe(1);
+  });
+
+  it("keeps applications awaiting review unavailable to mobile status writes", async () => {
+    const { id, updatedAt } = await db.application.create({ data: { awaitingReview: true } });
+    expect(await applyStatusChange(db, id, "SENT", t(0), updatedAt)).toEqual({ outcome: "not-found" });
+    expect(await db.application.findUniqueOrThrow({ where: { id }, select: { status: true } })).toEqual({ status: "DRAFT" });
+  });
+
   it("applies concurrent changes one after the other", async () => {
     const { id } = await db.application.create({ data: {} });
     await Promise.all([
