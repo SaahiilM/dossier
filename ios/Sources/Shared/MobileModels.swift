@@ -146,6 +146,116 @@ struct ProfileEnvelope: Decodable {
     let profile: JSONValue
 }
 
+/// The existing Profile → Basics fields exposed by the mobile basics endpoint.
+struct MobileProfileBasics: Codable, Equatable {
+    var name: String
+    var headline: String
+    var email: String
+    var phone: String
+    var dob: String
+    var website: String
+    var address: String
+    var city: String
+    var country: String
+    var linkedin: String
+    var summary: String
+    var showAge: Bool
+
+    static let empty = MobileProfileBasics(
+        name: "", headline: "", email: "", phone: "", dob: "", website: "",
+        address: "", city: "", country: "", linkedin: "", summary: "", showAge: false
+    )
+
+    init(
+        name: String = "", headline: String = "", email: String = "", phone: String = "",
+        dob: String = "", website: String = "", address: String = "", city: String = "",
+        country: String = "", linkedin: String = "", summary: String = "", showAge: Bool = false
+    ) {
+        self.name = name
+        self.headline = headline
+        self.email = email
+        self.phone = phone
+        self.dob = dob
+        self.website = website
+        self.address = address
+        self.city = city
+        self.country = country
+        self.linkedin = linkedin
+        self.summary = summary
+        self.showAge = showAge
+    }
+
+    init(profile: JSONValue) {
+        guard case .object(let root) = profile,
+              case .object(let values)? = root["basics"] else {
+            self = .empty
+            return
+        }
+        func string(_ key: String) -> String {
+            if case .string(let value)? = values[key] { return value }
+            return ""
+        }
+        let showAge: Bool
+        if case .bool(let value)? = values["showAge"] { showAge = value }
+        else { showAge = false }
+        self.init(
+            name: string("name"), headline: string("headline"), email: string("email"), phone: string("phone"),
+            dob: string("dob"), website: string("website"), address: string("address"), city: string("city"),
+            country: string("country"), linkedin: string("linkedin"), summary: string("summary"), showAge: showAge
+        )
+    }
+
+    var jsonValue: JSONValue {
+        .object([
+            "name": .string(name), "headline": .string(headline), "email": .string(email),
+            "phone": .string(phone), "dob": .string(dob), "website": .string(website),
+            "address": .string(address), "city": .string(city), "country": .string(country),
+            "linkedin": .string(linkedin), "summary": .string(summary), "showAge": .bool(showAge),
+        ])
+    }
+}
+
+struct MobileProfileBasicsEnvelope: Decodable {
+    let basics: MobileProfileBasics
+}
+
+/// Encodes only fields the user changed. Nil values are omitted by Encodable,
+/// while empty strings remain explicit so a field can be cleared.
+struct MobileProfileBasicsPatch: Encodable {
+    var name: String?
+    var headline: String?
+    var email: String?
+    var phone: String?
+    var dob: String?
+    var website: String?
+    var address: String?
+    var city: String?
+    var country: String?
+    var linkedin: String?
+    var summary: String?
+    var showAge: Bool?
+
+    init(draft: MobileProfileBasics, comparedTo baseline: MobileProfileBasics) {
+        name = draft.name == baseline.name ? nil : draft.name
+        headline = draft.headline == baseline.headline ? nil : draft.headline
+        email = draft.email == baseline.email ? nil : draft.email
+        phone = draft.phone == baseline.phone ? nil : draft.phone
+        dob = draft.dob == baseline.dob ? nil : draft.dob
+        website = draft.website == baseline.website ? nil : draft.website
+        address = draft.address == baseline.address ? nil : draft.address
+        city = draft.city == baseline.city ? nil : draft.city
+        country = draft.country == baseline.country ? nil : draft.country
+        linkedin = draft.linkedin == baseline.linkedin ? nil : draft.linkedin
+        summary = draft.summary == baseline.summary ? nil : draft.summary
+        showAge = draft.showAge == baseline.showAge ? nil : draft.showAge
+    }
+
+    var isEmpty: Bool {
+        name == nil && headline == nil && email == nil && phone == nil && dob == nil && website == nil &&
+        address == nil && city == nil && country == nil && linkedin == nil && summary == nil && showAge == nil
+    }
+}
+
 struct MobileSetupStatus: Decodable, Equatable {
     let profileReady: Bool
     let aiConfigured: Bool
