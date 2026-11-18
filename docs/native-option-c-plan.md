@@ -8,7 +8,7 @@ Build a real SwiftUI application. Keep the web UI in Next.js. Both clients use t
 
 The existing Linux Docker deployment behind Cloudflare Tunnel remains the initial server. No Vercel migration, new microservices or database replacement is required for the first release. Infrastructure changes should follow measured needs. The existing PostgreSQL option remains available for a future deployment change.
 
-V1 includes capture, review, profile editing, application tracking, server generation and document access. It does not promise automatic submission to arbitrary employer websites, LinkedIn account automation, a fully offline replica or local AI generation. Saving, preparing, approving, sending and confirming submission are distinct actions.
+The product target is native parity for every Dossier workflow the device can support. The first beta is a delivery milestone. It includes capture and application browsing, followed by editing, review, profile setup, server generation, and document access. Each new workflow gets a native screen and a supported server contract. Third-party authorization and employer pages can use the system browser when required. It does not promise automatic submission to arbitrary employer websites, LinkedIn account automation, a fully offline replica or local AI generation. Saving, preparing, approving, sending and confirming submission are distinct actions.
 
 ## Ownership and reuse
 
@@ -70,6 +70,8 @@ Each task should be a reviewable change. Completion requires its acceptance crit
 - [ ] **C13 — Add analysis and document review.** Start server extraction/scoring/generation jobs, show reconnectable progress, review factual gaps, edit drafts and access versioned PDFs/text. Tie generation to explicit profile/posting/document input versions and detect stale results. Dependency: C08, C10, C12. Acceptance: starting on iOS and reviewing on web works; newer manual edits are not silently overwritten by an older job; the same canonical document is downloaded on both clients.
 - [ ] **C14 — Add action approval and tracking.** Expose supported send/integration actions with review of recipient, attachments and content; retain explicit user confirmation. External employer application forms open in the browser, with manual submission confirmation unless a supported integration provides evidence. Dependency: C07, C13. Acceptance: Prepare/Approved/Sent/Submitted do not collapse into one status; retries cannot send twice; audit history records outcomes; failed actions do not falsely advance tracking.
 
+- [ ] **C22 — Complete setup inside the native app.** Build a SwiftUI setup flow backed by authenticated mobile commands that reuse the web wizard’s validation and saved state. Start with editing profile basics and showing readiness. Add supported AI provider selection and connection checks, then resume import and integration setup. Present provider-required authorization in a system authentication session and resume the native step afterward. Acceptance: someone starting with an empty profile can complete core setup from the phone, resume an interrupted step, and see matching setup status on the web. Remove the general web wizard shortcut as the primary action once the native steps cover it. Dependency: C05/C06 and the relevant profile, provider, and integration commands.
+
 ### Release and follow-up
 
 - [ ] **C15 — Validate the whole journey and release.** Complete contract, server and native checks; verify device sharing and narrow-screen/tablet accessibility. Back up production data, test schema changes on a copy, deploy additive API changes first, then distribute the native beta. Document app/API compatibility and rollback. Dependency: C11–C14. Acceptance: share → Inbox → resolve/paste → analyze → review → prepare → track works on iOS and web; bad network, auth expiry, restart, duplicates and concurrent edits are exercised. Validate existing web features and fork providers too.
@@ -83,6 +85,12 @@ Each task should be a reviewable change. Completion requires its acceptance crit
 4. **Measured enhancements:** C16. Local AI and push only after the shared foundation is working well.
 
 Slices describe capability milestones; they do not waive prerequisite acceptance criteria for the functions shipped in that slice.
+
+## Native parity checklist
+
+Track each web workflow against a native entry point, a shared server operation, and its verification status. Complete first-run setup, profile and resume import, job discovery and capture, application preparation and tracking, notes, documents and PDF export, interview scheduling, and email review and sending. Include provider setup, preferences, and data management. For administrative operations that have an equivalent native workflow, use the same confirmation and authorization rules as the web.
+
+The welcome screen should launch the native setup step when it exists. A step still under development should remain clearly identified, and completing a step on either client should update the same server state. Preserve the existing provider choices and credentials on the server.
 
 ## Quality and decision gates
 

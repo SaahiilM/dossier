@@ -8,7 +8,8 @@ import { CustomSectionFormat, JobStatus, LanguageLevel } from "@/generated/prism
 import { action, ActionError } from "@/lib/action";
 import { rewriteSectionOnDrafts } from "@/lib/custom-section-drafts";
 import { prisma } from "@/lib/prisma";
-import { fieldsFromBasics, inEntryOrder } from "@/lib/profile";
+import { inEntryOrder } from "@/lib/profile";
+import { profileBasicsSchema, writeProfileBasics } from "@/lib/profile-basics";
 import { fieldsFromWorkAuthorization, workAuthorizationSchema } from "@/lib/work-authorization";
 import { findOrCreateSkill, firstSort, nextSort } from "@/lib/profile-entries";
 import { discardProfileImports, importProfileJob } from "@/lib/jobs/import-profile";
@@ -36,35 +37,13 @@ export const saveWorkAuthorization = action(workAuthorizationSchema, async (work
   return null;
 });
 
-export const saveBasics = action(
-  z.object({
-    name: text(200),
-    headline: text(300),
-    email: text(320),
-    phone: text(60),
-    dob: z.union([z.literal(""), z.iso.date()]),
-    website: text(500),
-    address: text(300),
-    city: text(120),
-    country: text(120),
-    linkedin: text(500),
-    summary: text(5000),
-    showAge: z.boolean(),
-  }),
-  async (basics) => {
-    const before = await loadProfileName();
-    await prisma.$transaction(
-      Object.entries(fieldsFromBasics(basics)).map(([key, value]) =>
-        value === null
-          ? prisma.profileField.deleteMany({ where: { key } })
-          : prisma.profileField.upsert({ where: { key }, create: { key, value }, update: { value } }),
-      ),
-    );
-    // The sidebar shows the name.
-    if (before !== basics.name) revalidatePath("/", "layout");
-    return null;
-  },
-);
+export const saveBasics = action(profileBasicsSchema, async (basics) => {
+  const before = await loadProfileName();
+  await writeProfileBasics(basics);
+  // The sidebar shows the name.
+  if (before !== basics.name) revalidatePath("/", "layout");
+  return null;
+});
 
 // ─── Photo (#224) ────────────────────────────────────────────────────────────
 
