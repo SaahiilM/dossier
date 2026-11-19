@@ -17,7 +17,7 @@ export async function saveScore(
   inputFingerprint: string | null = null,
 ): Promise<void> {
   const where = { source_externalId_profileId: { source: posting.source, externalId: posting.externalId, profileId } };
-  // A score without a breakdown or structured eligibility (one written in Claude chat) clears the old engine data.
+  // A score without a breakdown or structured eligibility clears the old engine data.
   const data = {
     score: fit.score,
     reasons: fit.reasons,
