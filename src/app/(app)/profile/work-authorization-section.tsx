@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useState, type KeyboardEvent } from "react";
+import { useId, useState, type KeyboardEvent } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -152,13 +152,10 @@ export function WorkAuthorizationSection({
   update: UpdateProfile;
 }) {
   const track = useTrackSave();
-  const [wa, setWa] = useState(profile.workAuthorization);
-  useEffect(() => setWa(profile.workAuthorization), [profile.workAuthorization]);
+  const wa = profile.workAuthorization;
   const { flush } = useAutosave(wa, (value) => track(saveWorkAuthorization(value)));
   const patch = (change: (current: WorkAuthorization) => WorkAuthorization) => {
-    const next = change(wa);
-    setWa(next);
-    update((current) => ({ ...current, workAuthorization: next }));
+    update((current) => ({ ...current, workAuthorization: change(current.workAuthorization) }));
   };
   const touch = () => queueMicrotask(() => flush());
 

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { BUILT_IN_SECTIONS } from "@/lib/resume-sections";
 
-import { navSections, SECTIONS, sectionFromParam, sectionHref } from "./sections";
+import { navSections, SECTIONS, sectionFromParam, sectionHref, SHARED_SECTIONS } from "./sections";
 
 describe("profile sections", () => {
   it("start in a resume's usual order, between Basics and Facts about me", () => {
@@ -22,8 +22,12 @@ describe("profile sections", () => {
     ]);
   });
 
+  it("marks shared work authorization alongside the other all-profile sections", () => {
+    expect(SHARED_SECTIONS.has("workAuthorization")).toBe(true);
+  });
+
   it("list in the order given, with a section the user made above References", () => {
-    const section = { id: "a", title: "Awards", format: "LINES" as const, items: [] };
+    const section = { id: "a", title: "Awards", format: "LINES" as const, countsAs: "EXTRA_ACTIVITIES" as const, items: [] };
     const ids = navSections([section], ["facts", ...BUILT_IN_SECTIONS, "basics"]).map((entry) => entry.id);
     expect([ids[0], ids[1], ids.at(-1)]).toEqual(["workAuthorization", "facts", "basics"]);
     expect(ids.indexOf("custom:a")).toBe(ids.indexOf("references") - 1);

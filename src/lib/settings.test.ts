@@ -1,4 +1,3 @@
-import { DEFAULT_SECTION_LAYOUT } from "@/lib/resume-sections";
 import { describe, expect, it } from "vitest";
 
 import { DateFormat } from "@/generated/prisma/enums";
@@ -30,8 +29,7 @@ describe("stored settings", () => {
   it("reads an empty table as the prototype's defaults", () => {
     expect(settingsFromRows([])).toEqual({
       setupGuide: null,
-      resumeSections: DEFAULT_SECTION_LAYOUT,
-      fitBaseResume: false,
+      openProfileId: null,
       provider: null,
       baseUrl: null,
       model: null,
@@ -45,24 +43,25 @@ describe("stored settings", () => {
       dateFormat: "DAY_MONTH_YEAR",
       defaultTone: "WARM",
       docLanguage: null,
-      resumeLanguage: null,
       customLanguages: [],
+      dailyNote: null,
+      dailyNoteAi: true,
       fileNamePattern: "{name} – {company} – {doc}",
       includeRefs: false,
       documentsToWrite: "both",
       nightlyBackup: true,
       jobRetentionHours: 24,
-      baseThemeId: "editorial",
       applicationsView: "board",
       applicationsFilter: "all",
+      applicationsBoardStatuses: [],
       applicationsSort: "updated",
       dashboardPeriod: "all",
       quietDays: 7,
-      skillOrder: "relevance",
-      experienceOrder: "date",
-      projectOrder: "date",
-      educationOrder: "date",
       backupProblem: null,
+      portals: null,
+      portalKeysEnc: {},
+      portalWithdrawalsKept: {},
+      archiveAfterDays: 30,
       jobSource: null,
       jsearchKeyEnc: null,
       jsearchHost: "openwebninja",
@@ -71,11 +70,14 @@ describe("stored settings", () => {
       arbeitsagenturAcceptedAt: null,
       scorer: null,
       typesafeKeyEnc: null,
-      openRouterScoringModel: null,
-      openRouterScoringKeyEnc: null,
+      decisionsKeyEnc: null,
+      openrouterScoringKeyEnc: null,
+      openrouterScoringModel: null,
+      openrouterDecisionModel: null,
       agentEnabled: false,
       agentHour: 7,
       agentMinScore: 70,
+      agentCovers: null,
       agentMaxScores: 15,
       agentMaxDrafts: 3,
       agentAutoDraft: false,
@@ -84,6 +86,7 @@ describe("stored settings", () => {
       startupsLastRefresh: null,
       updateCheck: true,
       latestVersion: null,
+      aiTest: null,
       latestVersionUrl: null,
       updateCheckDay: null,
       updateDismissed: null,
@@ -111,6 +114,10 @@ describe("stored settings", () => {
       connectorEnabledAt: null,
       connectorRedirects: [],
       browserTimeZone: null,
+      lastOrigin: null,
+      portalNotices: {},
+      notificationsDay: null,
+      notifiedVersion: null,
     });
   });
 
@@ -130,6 +137,22 @@ describe("stored settings", () => {
     expect(rows).toContainEqual({ key: "quietDays", value: "14" });
     expect(settingsFromRows(rows)).toMatchObject(saved);
     expect(settingValue(null)).toBeNull();
+  });
+
+  it("reads legacy OpenRouter setting keys through the upstream lower-case contract", () => {
+    expect(
+      settingsFromRows([
+        { key: "openRouterScoringKeyEnc", value: "v1.legacy-encrypted-value" },
+        { key: "openRouterScoringModel", value: "legacy/model" },
+      ]),
+    ).toMatchObject({ openrouterScoringKeyEnc: "v1.legacy-encrypted-value", openrouterScoringModel: "legacy/model" });
+
+    expect(
+      settingsFromRows([
+        { key: "openRouterScoringModel", value: "legacy/model" },
+        { key: "openrouterScoringModel", value: "current/model" },
+      ]).openrouterScoringModel,
+    ).toBe("current/model");
   });
 
   it("reads values that don't fit as the default, and ignores unknown keys", () => {

@@ -18,7 +18,7 @@ vi.mock("@/lib/profile-data", () => ({
 vi.mock("@/lib/prisma", () => ({ prisma: { application: { findFirst: state.findFirst } } }));
 vi.mock("@/lib/settings-data", () => ({ loadSettings: (...args: unknown[]) => state.loadSettings(...args) }));
 
-import { getMobileApplication, getMobileSetup, listMobileApplications, MOBILE_LIST_PAGE_SIZE } from "./resources";
+import { getMobileApplication, getMobileProfile, getMobileSetup, listMobileApplications, MOBILE_LIST_PAGE_SIZE } from "./resources";
 
 const item = (index: number, updatedAt = new Date("2026-11-17T00:00:00.000Z").getTime()) => ({
   id: `application-${String(index).padStart(3, "0")}`,
@@ -110,6 +110,13 @@ describe("mobile resource DTOs", () => {
       extracted: { title: "Designer", company: "Northwind", requirements: [] },
       match: null,
     });
+  });
+
+  it("loads the default profile for v1 profile detail", async () => {
+    state.loadProfile.mockResolvedValue({ basics: { name: "Jane Doe", headline: "Designer" } });
+
+    await expect(getMobileProfile()).resolves.toEqual({ basics: { name: "Jane Doe", headline: "Designer" } });
+    expect(state.loadProfile).toHaveBeenCalledWith();
   });
 
   it("treats an older incomplete account as not ready or in progress", async () => {

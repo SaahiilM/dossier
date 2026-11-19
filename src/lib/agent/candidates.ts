@@ -1,11 +1,12 @@
 import { createHash } from "node:crypto";
 
-import type { Prisma } from "@/generated/prisma/client";
-import { parsePostingFitMeta, type PostingFit } from "@/lib/fit";
+import type { AgentCandidate, Prisma } from "@/generated/prisma/client";
 import { linkKey, type FoundPosting } from "@/lib/job-search/search";
+import { parsePostingFitMeta, type PostingFit } from "@/lib/fit";
 import type { ScoringConfig } from "@/lib/scoring/config";
 import { scoreInputFingerprint } from "@/lib/scoring/fingerprint";
-import type { ProfileData } from "@/lib/profile";
+import type { ScoringProfile } from "@/lib/scoring/questions";
+import { coverageOf, type Coverage } from "@/lib/posting-coverage";
 
 // The job agent's candidates (E16): postings it found and scored. A dismissed
 // one stays, so the posting never comes back, but keeps only what dedupe
@@ -34,14 +35,13 @@ export function agentDedupeKey(posting: Pick<FoundPosting, "source" | "externalI
 }
 
 /** A posting as a new candidate, with its score and provenance. */
-type CandidateScore = Pick<PostingFit, "score" | "reasons" | "redFlags" | "meta">;
-
 export function candidateData(
   posting: FoundPosting,
-  fit: CandidateScore,
+  fit: Pick<PostingFit, "score" | "reasons" | "redFlags" | "meta" | "breakdown">,
   scoredWith = "",
   inputFingerprint: string | null = null,
 ): Prisma.AgentCandidateCreateInput {
+  const coverage = coverageOf(fit);
   return {
     source: posting.source,
     externalId: posting.externalId,
@@ -58,55 +58,43 @@ export function candidateData(
     score: fit.score,
     reasons: fit.reasons,
     redFlags: fit.redFlags,
-    meta: fit.meta ?? undefined,
+    meta: fit.meta ? (fit.meta as Prisma.InputJsonValue) : undefined,
     scoredWith,
     inputFingerprint,
+    covered: coverage.hit,
+    requirements: coverage.total,
+    mustMissing: coverage.mustMissing,
     dedupeKey: agentDedupeKey(posting),
   };
 }
 
-type CandidateFitRow = {
-  score: number;
-  reasons: Prisma.JsonValue | null;
-  redFlags: Prisma.JsonValue | null;
-  meta?: Prisma.JsonValue | null;
-  scoredWith?: string | null;
-  inputFingerprint?: string | null;
-  title: string;
-  company: string;
-  place: string;
-  remote: boolean | null;
-  salary: string;
-  description: string;
-};
+type CandidateFitRow = Pick<
+  AgentCandidate,
+  "score" | "reasons" | "redFlags" | "meta" | "scoredWith" | "inputFingerprint" | "title" | "company" | "place" | "remote" | "salary" | "description"
+>;
 
-/** Agent row as PostingFit for auto-draft and UI. */
+/** Agent row as PostingFit for freshness and auto-draft checks. */
 export function postingFitFromCandidate(
   row: CandidateFitRow,
-  profile: ProfileData,
+  profile: ScoringProfile,
   config: ScoringConfig,
   referenceDate: Date,
 ): PostingFit {
-  const fingerprint = scoreInputFingerprint(
-    profile,
-    {
-      title: row.title,
-      company: row.company,
-      place: row.place,
-      remote: row.remote,
-      salary: row.salary,
-      description: row.description,
-    },
-    config,
-    referenceDate,
-  );
+  const posting = {
+    title: row.title,
+    company: row.company,
+    place: row.place,
+    remote: row.remote,
+    salary: row.salary,
+    description: row.description,
+  };
   return {
     score: row.score,
     reasons: stringsOf(row.reasons),
     redFlags: stringsOf(row.redFlags),
     meta: parsePostingFitMeta(row.meta),
     scoredWith: row.scoredWith || undefined,
-    stale: !row.inputFingerprint || row.inputFingerprint !== fingerprint,
+    stale: !row.inputFingerprint || row.inputFingerprint !== scoreInputFingerprint(profile, posting, config, referenceDate),
   };
 }
 
@@ -133,3 +121,20 @@ export const DISMISSED_TRIM = {
 export function stringsOf(value: Prisma.JsonValue | null): string[] {
   return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === "string") : [];
 }
+
+/** A candidate's coverage, as stored with it. */
+export const candidateCoverage = (candidate: { covered: number; requirements: number; mustMissing: number }): Coverage => ({
+  hit: candidate.covered,
+  total: candidate.requirements,
+  mustMissing: candidate.mustMissing,
+});
+
+/** Why a run left a posting unscored (E32-5, PL3). Under the cut-off isn't kept: it follows the cut-off as it is now. */
+export type SkipReason = "budget" | "known" | "dismissed";
+
+/** A skip as the Skipped tab says it. */
+export const SKIP_WORDS: Record<SkipReason, string> = {
+  budget: "Past the run's scoring limit: it stays in Positions unscored",
+  known: "Already in Positions: saved, applied for or archived",
+  dismissed: "Dismissed earlier",
+};

@@ -1,9 +1,69 @@
-// How well a posting fits the profile (#208, E16-2): a score from
-// score-posting, with why. Shared by Find jobs and the Agent screen.
-
 import { z } from "zod";
 
-import type { PostingScore } from "@/lib/ai/tasks/score-posting";
+import { addUp, FACTORS, fitLines, type Breakdown, type FactorAnswers } from "@/lib/scoring/factors";
+
+// How well a posting fits a profile (#208, E16-2, E25): a score, with why.
+// Shared by Positions, New application and the Agent screen. A score from the
+// engine (E25) has its breakdown; one from before it, or written in Claude
+// chat, has only its reasons and red flags.
+
+export type PostingFit = {
+  score: number;
+  reasons: string[];
+  redFlags: string[];
+  /** How it adds up (E25-6); null for a score without one. */
+  breakdown?: Breakdown | null;
+  meta?: PostingFitMeta;
+  scoredWith?: string;
+  stale?: boolean;
+};
+
+/** The score's band: "Good fit". */
+export function fitBand(score: number): string {
+  if (score >= 85) return "Excellent fit";
+  if (score >= 70) return "Good fit";
+  if (score >= 50) return "Possible fit";
+  return "Poor fit";
+}
+
+/** A scoring model's answers, added up (E25-1), with the breakdown also as plain lines. */
+export function fitFromAnswers(answers: FactorAnswers): PostingFit {
+  const { score, breakdown } = addUp(answers);
+  return { score, ...fitLines(breakdown), breakdown, meta: metaFromAnswers(answers) };
+}
+
+const MAX_REASONS = 4;
+const MAX_RED_FLAGS = 3;
+const MAX_LENGTH = 300;
+
+/** A score given whole, such as one written in Claude chat, trusting nothing: within 0–100, with short, non-empty reasons and flags within their limits. */
+export function fitFrom(answer: { score: number; reasons: string[]; redFlags: string[] }): PostingFit {
+  const clean = (lines: string[], max: number) =>
+    lines
+      .map((line) => line.trim().slice(0, MAX_LENGTH))
+      .filter(Boolean)
+      .slice(0, max);
+  const reasons = clean(answer.reasons, MAX_REASONS);
+  return {
+    score: Math.min(100, Math.max(0, Math.round(Number.isFinite(answer.score) ? answer.score : 0))),
+    reasons: reasons.length > 0 ? reasons : ["No reasons were given for this score."],
+    redFlags: clean(answer.redFlags, MAX_RED_FLAGS),
+  };
+}
+
+const factorIds = FACTORS.map((factor) => factor.id) as [Breakdown["factors"][number]["factor"], ...Breakdown["factors"][number]["factor"][]];
+
+/** A stored breakdown (PostingScore.breakdown), or null for anything else. */
+export const breakdownSchema = z.object({
+  factors: z.array(z.object({ factor: z.enum(factorIds), points: z.number(), max: z.number(), reason: z.string() })),
+  cap: z.object({ at: z.number(), reason: z.string() }).nullable(),
+  requirements: z.array(z.object({ text: z.string(), mustHave: z.boolean(), covered: z.boolean(), evidence: z.string().nullable(), skill: z.string().nullable().optional() })),
+});
+
+export const breakdownOf = (stored: unknown): Breakdown | null => breakdownSchema.nullable().catch(null).parse(stored ?? null);
+
+/** What scored it before the engine (E25): the AI model's score-posting@1 or @2, or Jev's first version. */
+export const isOlderScore = (scoredWith: string) => /^(score-posting@[12]|score-posting-jev@1|score-posting-openrouter-decisions@[123])\b/.test(scoredWith);
 
 export type PostingFitReview = "eligible" | "ineligible" | "needs_review";
 
@@ -19,16 +79,20 @@ export const postingFitMetaSchema = z.object({
 
 export type PostingFitMeta = z.infer<typeof postingFitMetaSchema>;
 
-export type PostingFit = {
-  score: number;
-  reasons: string[];
-  redFlags: string[];
-  meta?: PostingFitMeta;
-  /** What scored it; shown when stale or for audit. */
-  scoredWith?: string;
-  /** True when the saved fingerprint no longer matches the current profile or scorer. */
-  stale?: boolean;
-};
+/** Eligibility from the shared factor answers: any hard mismatch or uncertainty blocks agent auto-draft. */
+export function metaFromAnswers(answers: FactorAnswers): PostingFitMeta {
+  const issues: PostingFitIssue[] = [];
+  if (answers.requirements.some((requirement) => requirement.mustHave && !requirement.covered)) issues.push("missing_required");
+  if (answers.location.fit === "cannot") issues.push("location_permit");
+  if (answers.seniority.fit === "far-above" || answers.seniority.fit === "far-below") issues.push("seniority_gap");
+  if (answers.thin) issues.push("thin_posting");
+
+  const uncertain = answers.location.fit === "stretch" || answers.seniority.fit === "above" || answers.seniority.fit === "below";
+  if (uncertain) issues.push("uncertain");
+  const hardIssue = issues.some((issue) => issue !== "uncertain");
+  const review: PostingFitReview = hardIssue ? "ineligible" : uncertain ? "needs_review" : "eligible";
+  return { review, blockAutoDraft: review !== "eligible", ...(issues.length > 0 ? { issues } : {}) };
+}
 
 export function parsePostingFitMeta(value: unknown): PostingFitMeta | undefined {
   const parsed = postingFitMetaSchema.safeParse(value);
@@ -36,7 +100,7 @@ export function parsePostingFitMeta(value: unknown): PostingFitMeta | undefined 
 }
 
 /** AI chat scorer: conservative meta from red flags only (no Jev parts). */
-export function chatScoreMeta(answer: PostingScore): PostingFitMeta {
+export function chatScoreMeta(answer: Pick<PostingFit, "redFlags" | "score">): PostingFitMeta {
   const hard = answer.redFlags.length > 0;
   const review: PostingFitReview = hard ? "needs_review" : answer.score >= 70 ? "eligible" : "needs_review";
   return { review, blockAutoDraft: hard || review !== "eligible" };
@@ -46,13 +110,8 @@ export function chatScoreMeta(answer: PostingScore): PostingFitMeta {
 export function fitAutoDraftBlocked(fit: PostingFit): boolean {
   if (fit.stale) return true;
   if (!fit.meta) return true;
-  return fit.meta.blockAutoDraft;
+  if (fit.meta.blockAutoDraft || fit.meta.review !== "eligible") return true;
+  if (fit.breakdown?.cap) return true;
+  return Boolean(fit.breakdown?.requirements.some((requirement) => requirement.mustHave && !requirement.covered));
 }
 
-/** The score's band, as the prompt defines them: "Good fit". */
-export function fitBand(score: number): string {
-  if (score >= 85) return "Excellent fit";
-  if (score >= 70) return "Good fit";
-  if (score >= 50) return "Possible fit";
-  return "Poor fit";
-}

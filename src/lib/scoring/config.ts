@@ -1,88 +1,74 @@
 import "server-only";
 
 import { env, type Env } from "@/lib/env";
-import { decryptSecret, SecretUnreadable, TYPESAFE_KEY, OPENROUTER_SCORING_KEY } from "@/lib/secrets";
+import { DECISIONS_KEY, decryptSecret, OPENROUTER_SCORING_KEY, SecretUnreadable, TYPESAFE_KEY, type SecretKind } from "@/lib/secrets";
 import type { SettingsData } from "@/lib/settings";
 import { loadSettings } from "@/lib/settings-data";
 
-import {
-  OPENROUTER_DECISION_MODEL,
-  OPENROUTER_SCORING_KEY_MISSING,
-  OPENROUTER_SCORING_KEY_UNREADABLE,
-  OPENROUTER_SCORING_MODEL_MISSING,
-  SCORING_KEY_MISSING,
-  SCORING_KEY_UNREADABLE,
-  type Scorer,
-  type ScoringKeyState,
-  type ScoringView,
-} from "./scorers";
+import { OPENROUTER_DECISION_MODEL, OPENROUTER_SCORING_MODEL, SCORER_INFO, SCORERS, scorerKeyMissing, scorerKeyUnreadable, type Scorer, type ScoringKeyState, type ScoringView } from "./scorers";
 
-// What scores postings (#274): the choice saved in Settings → Scoring, or
-// else DOSSIER_SCORER, or else the AI model; and Jev's key, saved there or
-// in DOSSIER_TYPESAFE_KEY.
+// Which scoring model scores postings (#274, E25-2): the choice saved in
+// Settings → Scoring, or else DOSSIER_SCORER, or else the AI model; and each
+// model's key, saved there (encrypted for it only) or in its variable.
+
+/** What each key is encrypted for, so a key saved for one can't be read as another's. */
+export const SCORER_KEY_CONTEXT: Partial<Record<Scorer, SecretKind>> = {
+  JEV: TYPESAFE_KEY,
+  DECISIONS: DECISIONS_KEY,
+  OPENROUTER_DECISIONS: OPENROUTER_SCORING_KEY,
+  OPENROUTER: OPENROUTER_SCORING_KEY,
+};
+
+type ScorerKeyConfig = { key: string | null; keyState: ScoringKeyState };
 
 export type ScoringConfig = {
   scorer: Scorer;
   /** Whether the choice is saved in Settings, rather than coming from DOSSIER_SCORER or the default. */
   saved: boolean;
-  key: string | null;
-  keyState: ScoringKeyState;
-  openRouterModel: string;
-  openRouterKey: string | null;
-  openRouterKeyState: ScoringKeyState;
-  /** `OPENROUTER_API_KEY` only when DOSSIER_OPENROUTER_SCORING_KEY_SOURCE is openrouter_api_key and the scoring key is unset. */
-  openRouterKeyEnv: "DOSSIER_OPENROUTER_SCORING_KEY" | "OPENROUTER_API_KEY";
+  /** The keys of the models that need one. */
+  keys: Partial<Record<Scorer, ScorerKeyConfig>>;
+  /** The OpenRouter model that scores (E25-4). */
+  openrouterModel: string;
 };
 
 const FROM_ENV: Record<NonNullable<Env["DOSSIER_SCORER"]>, Scorer> = {
   ai: "AI",
   jev: "JEV",
-  openrouter: "OPENROUTER",
+  "openai-decisions": "DECISIONS",
   "openrouter-decisions": "OPENROUTER_DECISIONS",
+  openrouter: "OPENROUTER",
 };
 
-export function resolveScoringConfig(
-  saved: Pick<SettingsData, "scorer" | "typesafeKeyEnc" | "openRouterScoringModel" | "openRouterScoringKeyEnc">,
-  source: Pick<
-    Env,
-    | "DOSSIER_SCORER"
-    | "DOSSIER_TYPESAFE_KEY"
-    | "DOSSIER_OPENROUTER_SCORING_KEY"
-    | "DOSSIER_OPENROUTER_SCORING_MODEL"
-    | "DOSSIER_OPENROUTER_SCORING_KEY_SOURCE"
-    | "OPENROUTER_API_KEY"
-  >,
-  secret?: string,
-): ScoringConfig {
+type SavedKeys = Pick<SettingsData, "scorer" | "typesafeKeyEnc"> & Partial<Pick<SettingsData, "decisionsKeyEnc" | "openrouterScoringKeyEnc" | "openrouterScoringModel" | "openrouterDecisionModel">> & { openRouterScoringKeyEnc?: string | null; openRouterScoringModel?: string | null };
+type KeyEnv = Pick<Env, "DOSSIER_SCORER" | "DOSSIER_TYPESAFE_KEY"> & Partial<Pick<Env, "DOSSIER_OPENROUTER_SCORING_KEY" | "DOSSIER_OPENROUTER_SCORING_MODEL" | "DOSSIER_OPENROUTER_SCORING_KEY_SOURCE" | "OPENROUTER_API_KEY">>;
+
+export function resolveScoringConfig(saved: SavedKeys, source: KeyEnv, secret?: string): ScoringConfig {
   const scorer = saved.scorer ?? (source.DOSSIER_SCORER ? FROM_ENV[source.DOSSIER_SCORER] : "AI");
-  const choice = { scorer, saved: saved.scorer !== null };
-  const requestedModel = (saved.openRouterScoringModel || source.DOSSIER_OPENROUTER_SCORING_MODEL || "").trim();
-  const openRouterModel = scorer === "OPENROUTER_DECISIONS" && requestedModel === "" ? OPENROUTER_DECISION_MODEL : requestedModel;
-  let openRouterKey: string | null = null;
-  let openRouterKeyState: ScoringKeyState = "none";
-  let openRouterKeyEnv: ScoringConfig["openRouterKeyEnv"] = "DOSSIER_OPENROUTER_SCORING_KEY";
-  if (saved.openRouterScoringKeyEnc) {
-    try { openRouterKey = decryptSecret(OPENROUTER_SCORING_KEY, saved.openRouterScoringKeyEnc, secret); openRouterKeyState = "set"; }
-    catch (error) { if (!(error instanceof SecretUnreadable)) throw error; openRouterKeyState = "unreadable"; }
-  } else if (source.DOSSIER_OPENROUTER_SCORING_KEY) {
-    openRouterKey = source.DOSSIER_OPENROUTER_SCORING_KEY;
-    openRouterKeyState = "env";
-  } else if (source.DOSSIER_OPENROUTER_SCORING_KEY_SOURCE === "openrouter_api_key" && source.OPENROUTER_API_KEY) {
-    // Explicit opt-in only. A general OpenRouter key is not a scoring key by itself.
-    openRouterKey = source.OPENROUTER_API_KEY;
-    openRouterKeyState = "env";
-    openRouterKeyEnv = "OPENROUTER_API_KEY";
-  }
-  if (saved.typesafeKeyEnc) {
-    try {
-      return { ...choice, key: decryptSecret(TYPESAFE_KEY, saved.typesafeKeyEnc, secret), keyState: "set", openRouterModel, openRouterKey, openRouterKeyState, openRouterKeyEnv };
-    } catch (error) {
-      if (!(error instanceof SecretUnreadable)) throw error;
-      return { ...choice, key: null, keyState: "unreadable", openRouterModel, openRouterKey, openRouterKeyState, openRouterKeyEnv };
+  const keys: Partial<Record<Scorer, ScorerKeyConfig>> = {};
+  for (const id of SCORERS) {
+    const info = SCORER_INFO[id].key;
+    if (!info) continue;
+    // The upper-cased field names are the prior fork's encrypted settings.
+    // Read them only as a compatibility fallback; new saves use the upstream
+    // per-scorer settings and the same dedicated encryption context.
+    const stored = saved[info.setting] || (id === "OPENROUTER" || id === "OPENROUTER_DECISIONS" ? saved.openRouterScoringKeyEnc : null);
+    if (stored) {
+      try {
+        keys[id] = { key: decryptSecret(SCORER_KEY_CONTEXT[id]!, stored, secret), keyState: "set" };
+      } catch (error) {
+        if (!(error instanceof SecretUnreadable)) throw error;
+        keys[id] = { key: null, keyState: "unreadable" };
+      }
+      continue;
     }
+    const fromEnv = id === "OPENROUTER" || id === "OPENROUTER_DECISIONS"
+      ? source.DOSSIER_OPENROUTER_SCORING_KEY ?? (source.DOSSIER_OPENROUTER_SCORING_KEY_SOURCE === "openrouter_api_key" ? source.OPENROUTER_API_KEY : undefined)
+      : info.envName ? source[info.envName] : undefined;
+    keys[id] = fromEnv ? { key: fromEnv, keyState: "env" } : { key: null, keyState: "none" };
   }
-  const jev = source.DOSSIER_TYPESAFE_KEY ? { key: source.DOSSIER_TYPESAFE_KEY, keyState: "env" as const } : { key: null, keyState: "none" as const };
-  return { ...choice, ...jev, openRouterModel, openRouterKey, openRouterKeyState, openRouterKeyEnv };
+  const decisionModel = saved.openrouterDecisionModel ?? saved.openRouterScoringModel ?? source.DOSSIER_OPENROUTER_SCORING_MODEL ?? OPENROUTER_DECISION_MODEL;
+  const chatModel = saved.openrouterScoringModel ?? source.DOSSIER_OPENROUTER_SCORING_MODEL ?? OPENROUTER_SCORING_MODEL;
+  return { scorer, saved: saved.scorer !== null, keys, openrouterModel: scorer === "OPENROUTER_DECISIONS" ? decisionModel : chatModel };
 }
 
 /** The scoring configuration in effect right now. */
@@ -92,43 +78,14 @@ export async function loadScoringConfig(): Promise<ScoringConfig> {
 
 export const scoringView = (config: ScoringConfig): ScoringView => ({
   scorer: config.scorer,
-  keyState: config.keyState,
-  openRouterKeyState: config.openRouterKeyState,
-  openRouterModel: config.openRouterModel,
-  openRouterKeyEnv: config.openRouterKeyEnv,
+  keys: Object.fromEntries(Object.entries(config.keys).map(([id, key]) => [id, key.keyState])),
+  openrouterModel: config.openrouterModel,
 });
 
-/** Jev's key, or why there isn't one, in words. */
-export function jevKey({ key, keyState }: Pick<ScoringConfig, "key" | "keyState">): { key: string; problem: null } | { key: null; problem: string } {
-  if (key) return { key, problem: null };
-  return { key: null, problem: keyState === "unreadable" ? SCORING_KEY_UNREADABLE : SCORING_KEY_MISSING };
-}
-
-/** OpenRouter judging key, or why it can't be used. */
-export function openRouterKey({
-  openRouterKey,
-  openRouterKeyState,
-  openRouterModel,
-}: Pick<ScoringConfig, "openRouterKey" | "openRouterKeyState" | "openRouterModel">):
-  | { key: string; model: string; problem: null }
-  | { key: null; model: null; problem: string } {
-  if (!openRouterModel) return { key: null, model: null, problem: OPENROUTER_SCORING_MODEL_MISSING };
-  if (!openRouterKey) {
-    return { key: null, model: null, problem: openRouterKeyState === "unreadable" ? OPENROUTER_SCORING_KEY_UNREADABLE : OPENROUTER_SCORING_KEY_MISSING };
-  }
-  return { key: openRouterKey, model: openRouterModel, problem: null };
-}
-
-/** OpenRouter decision key and model. An empty model uses the free default. */
-export function openRouterDecisionTarget({
-  openRouterKey,
-  openRouterKeyState,
-  openRouterModel,
-}: Pick<ScoringConfig, "openRouterKey" | "openRouterKeyState" | "openRouterModel">):
-  | { key: string; model: string; problem: null }
-  | { key: null; model: null; problem: string } {
-  if (!openRouterKey) {
-    return { key: null, model: null, problem: openRouterKeyState === "unreadable" ? OPENROUTER_SCORING_KEY_UNREADABLE : OPENROUTER_SCORING_KEY_MISSING };
-  }
-  return { key: openRouterKey, model: openRouterModel.trim() || OPENROUTER_DECISION_MODEL, problem: null };
+/** A scoring model's key, or why there isn't one, in words; a model without a key needs none. */
+export function scorerKey(config: Pick<ScoringConfig, "keys">, scorer: Scorer): { key: string; problem: null } | { key: null; problem: string } {
+  const found = config.keys[scorer];
+  if (!SCORER_INFO[scorer].key) return { key: "", problem: null };
+  if (found?.key) return { key: found.key, problem: null };
+  return { key: null, problem: found?.keyState === "unreadable" ? scorerKeyUnreadable(scorer) : scorerKeyMissing(scorer) };
 }

@@ -42,18 +42,18 @@ describe("applyStatusChange", () => {
 
   it("applies only when the application version matches, with a conflict for stale edits", async () => {
     const { id } = await db.application.create({ data: { updatedAt: t(0) } });
-    expect(await applyStatusChange(db, id, "SENT", t(1), t(0))).toMatchObject({ outcome: "changed" });
+    expect(await applyStatusChange(db, id, "SENT", t(1), { expectedUpdatedAt: t(0) })).toMatchObject({ outcome: "changed" });
     const current = await db.application.findUniqueOrThrow({ where: { id }, select: { updatedAt: true, status: true } });
     await db.application.update({ where: { id }, data: { updatedAt: t(3) } });
 
-    expect(await applyStatusChange(db, id, "INTERVIEW", t(4), current.updatedAt)).toEqual({ outcome: "conflict" });
+    expect(await applyStatusChange(db, id, "INTERVIEW", t(4), { expectedUpdatedAt: current.updatedAt })).toEqual({ outcome: "conflict" });
     expect(await db.application.findUniqueOrThrow({ where: { id }, select: { status: true } })).toEqual({ status: "SENT" });
     expect(await db.statusEvent.count({ where: { applicationId: id } })).toBe(1);
   });
 
   it("keeps applications awaiting review unavailable to mobile status writes", async () => {
     const { id, updatedAt } = await db.application.create({ data: { awaitingReview: true } });
-    expect(await applyStatusChange(db, id, "SENT", t(0), updatedAt)).toEqual({ outcome: "not-found" });
+    expect(await applyStatusChange(db, id, "SENT", t(0), { expectedUpdatedAt: updatedAt })).toEqual({ outcome: "not-found" });
     expect(await db.application.findUniqueOrThrow({ where: { id }, select: { status: true } })).toEqual({ status: "DRAFT" });
   });
 
@@ -119,5 +119,31 @@ describe("undoStatusChange", () => {
     expect(await undoStatusChange(db, first.event.id)).toEqual({ outcome: "superseded" });
     expect((await fields(id)).status).toBe("INTERVIEW");
     expect(await undoStatusChange(db, "missing")).toEqual({ outcome: "not-found" });
+  });
+});
+
+describe("how it was sent (E29-7)", () => {
+  const via = async (id: string) => (await db.application.findUniqueOrThrow({ where: { id }, select: { sentVia: true } })).sentVia;
+
+  it("keeps it on the first send only, and forgets it when that send is undone", async () => {
+    const { id } = await db.application.create({ data: { company: "Ledgerly" } });
+    const sent = await applyStatusChange(db, id, "SENT", t(0), { sentVia: "GMAIL" });
+    expect(await via(id)).toBe("GMAIL");
+
+    // Moving on later doesn't change how it went out.
+    await applyStatusChange(db, id, "SCREENING", t(1), { sentVia: "EMAIL" });
+    expect(await via(id)).toBe("GMAIL");
+
+    await undoStatusChange(db, (await db.statusEvent.findFirstOrThrow({ where: { to: "SCREENING" } })).id);
+    expect(await via(id)).toBe("GMAIL");
+    if (sent.outcome !== "changed") throw new Error("not sent");
+    await undoStatusChange(db, sent.event.id);
+    expect(await via(id)).toBeNull();
+  });
+
+  it("stays unsaid when it isn't given", async () => {
+    const { id } = await db.application.create({ data: {} });
+    await applyStatusChange(db, id, "SENT", t(0));
+    expect(await via(id)).toBeNull();
   });
 });

@@ -8,6 +8,7 @@ import { ActionError } from "@/lib/action";
 import { AiError } from "@/lib/ai/errors";
 import { createApplicationFromDocuments, type ApplicationDetails } from "@/lib/application-create";
 import type { Extracted } from "@/lib/application-data";
+import { fitAutoDraftBlocked } from "@/lib/fit";
 import { fullText } from "@/lib/job-search/find";
 import { postingText, type FoundPosting } from "@/lib/job-search/search";
 import { readPostingJob } from "@/lib/jobs/read-posting";
@@ -16,10 +17,17 @@ import { writeDocumentsJob } from "@/lib/jobs/write-documents";
 import { logServerError } from "@/lib/log";
 import { dismissPosting, storePosting, unmarkPosting } from "@/lib/postings";
 import { prisma } from "@/lib/prisma";
+import { emit } from "@/lib/notifications/notify";
+import { agentCoversOf } from "@/lib/settings";
+import { passes } from "@/lib/posting-coverage";
+import { levelsProblem, profileIdOr } from "@/lib/profiles";
+import { loadScoringConfig } from "@/lib/scoring/config";
+import { loadScoringProfile } from "@/lib/scoring";
 import { loadSettings } from "@/lib/settings-data";
 
-import { DISMISSED_TRIM } from "./candidates";
+import { candidateCoverage, DISMISSED_TRIM, postingFitFromCandidate } from "./candidates";
 import { lockAgentSearches } from "./searches";
+import { bestProfileFor } from "@/lib/posting-scores";
 
 // A candidate's draft (E16-5): written the way New application writes one,
 // kept off Applications until it's approved (#195), and never sent.
@@ -29,7 +37,7 @@ import { lockAgentSearches } from "./searches";
 export const draftJobKey = (candidateId: string) => `agent-candidate:${candidateId}`;
 
 /** A candidate in the shape search results have. */
-export function foundFromCandidate(candidate: AgentCandidate): FoundPosting {
+function foundFromCandidate(candidate: AgentCandidate): FoundPosting {
   return {
     source: candidate.source,
     externalId: candidate.externalId,
@@ -64,10 +72,31 @@ function detailsFrom(extracted: Extracted): ApplicationDetails {
  * retry, a second click and auto-draft can't make two applications; a failure
  * sends it back to SCORED with the error to show. Returns the application.
  */
-export async function draftCandidate(candidateId: string, context: JobContext): Promise<string> {
+export async function draftCandidate(candidateId: string, context: JobContext, { auto = false }: { auto?: boolean } = {}): Promise<string> {
   const candidate = await prisma.agentCandidate.findUnique({ where: { id: candidateId } });
   if (!candidate) throw new ActionError("That posting is no longer in the agent's queue.");
   if (candidate.status === AgentCandidateStatus.DRAFTED && candidate.applicationId) return candidate.applicationId;
+  const foundBy = await prisma.agentCandidateSearch.findFirst({
+    where: { candidateId, search: { isNot: null } },
+    orderBy: { createdAt: "asc" },
+    select: { search: { select: { profileId: true, allProfiles: true } } },
+  });
+  const best = foundBy?.search?.allProfiles ? await bestProfileFor(candidate) : null;
+  const profileId = await profileIdOr(best ?? foundBy?.search?.profileId);
+  if (auto) {
+    const settings = await loadSettings();
+    const coverage = candidateCoverage(candidate);
+    const message = "The job agent held this draft because the score is out of date, needs review, or no longer meets the auto-draft settings.";
+    const holdAutoDraft = async () => {
+      await prisma.agentCandidate.updateMany({ where: { id: candidateId, status: AgentCandidateStatus.SCORED }, data: { error: message } });
+      throw new ActionError(message);
+    };
+    if (!settings.agentAutoDraft || candidate.requirements === 0 || candidate.mustMissing > 0 || !passes(coverage, agentCoversOf(settings))) await holdAutoDraft();
+    if (await levelsProblem(profileId)) await holdAutoDraft();
+    const [profile, config] = await Promise.all([loadScoringProfile(profileId), loadScoringConfig()]);
+    const fit = postingFitFromCandidate(candidate, profile, config, new Date());
+    if (fitAutoDraftBlocked(fit)) await holdAutoDraft();
+  }
   const { count } = await prisma.agentCandidate.updateMany({
     where: { id: candidateId, status: AgentCandidateStatus.SCORED },
     data: { status: AgentCandidateStatus.DRAFTING, error: null },
@@ -83,11 +112,12 @@ export async function draftCandidate(candidateId: string, context: JobContext): 
     const posting = postingText({ ...found, description });
 
     await context.step(`Reading the posting from ${name}`);
-    const reading = await readPostingJob.run({ posting }, context);
+    // Its score for that profile, when the agent kept one, answers How you match with no new call (E25-7).
+    const reading = await readPostingJob.run({ posting, profileId, scored: { source: candidate.source, externalId: candidate.externalId } }, context);
     await context.step(`Writing the draft for ${name}`);
     const settings = await loadSettings();
     const documents = await writeDocumentsJob.run(
-      { readJobId: context.id, posting, extracted: reading.extracted, match: reading.match, tone: settings.defaultTone, note: "", write: "both" },
+      { readJobId: context.id, posting, extracted: reading.extracted, match: reading.match, tone: settings.defaultTone, note: "", write: "both", profileId },
       context,
     );
     // Keep the whole text, so a retry doesn't fetch it again.
@@ -104,6 +134,7 @@ export async function draftCandidate(candidateId: string, context: JobContext): 
       tone: settings.defaultTone,
       note: "",
       claim: { kind: "agent", candidateId, score: candidate.score },
+      profileId,
     });
     // The job holds nothing of the draft, but goes with it all the same.
     await prisma.job.updateMany({ where: { id: context.id }, data: { applicationId } });
@@ -120,9 +151,22 @@ export async function draftCandidate(candidateId: string, context: JobContext): 
 /** Prepares one candidate's draft in the background (E16-5): from Prepare draft, or a run with auto-draft on. */
 export const agentDraftJob = defineJob({
   type: "agent-draft",
-  input: z.object({ candidateId: z.string().min(1) }),
+  input: z.object({
+    candidateId: z.string().min(1),
+    /** Prepared by the agent on its own (auto-draft), which sends "A draft is ready" (E26-6); Prepare draft never does. */
+    auto: z.boolean().default(false),
+  }),
   result: z.object({ applicationId: z.string().min(1) }),
-  run: async ({ candidateId }, context) => ({ applicationId: await draftCandidate(candidateId, context) }),
+  run: async ({ candidateId, auto }, context) => {
+    const applicationId = await draftCandidate(candidateId, context, { auto });
+    if (auto) {
+      const candidate = await prisma.agentCandidate.findUnique({ where: { id: candidateId }, select: { title: true, company: true, covered: true, requirements: true } });
+      if (candidate) {
+        await emit("draft.ready", { applicationId, title: candidate.title, company: candidate.company, coverage: candidate.requirements > 0 ? { hit: candidate.covered, total: candidate.requirements } : null });
+      }
+    }
+    return { applicationId };
+  },
 });
 
 /**

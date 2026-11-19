@@ -58,7 +58,7 @@ export async function listMobileApplications(cursorValue?: string): Promise<{
     status: row.status,
     archived: row.archived,
     match: row.match,
-    score: row.score,
+    score: row.match && row.match.total > 0 ? Math.round(100 * row.match.hit / row.match.total) : null,
     updatedAt: new Date(row.updatedAt).toISOString(),
   }));
 
@@ -133,6 +133,7 @@ export async function getMobileApplication(id: string): Promise<MobileApplicatio
   };
 }
 
+/** V1 has no profile selector; details use the first profile, like Basics. */
 export async function getMobileProfile(): Promise<MobileProfile> {
   return loadProfile();
 }

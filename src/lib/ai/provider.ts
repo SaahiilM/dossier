@@ -74,7 +74,7 @@ export type ChatCall = {
 export type ChatAnswer = { text: string; cutOff: boolean };
 
 /** SET-3 creativity as a sampling temperature. */
-export const TEMPERATURES: Record<Creativity, number> = {
+const TEMPERATURES: Record<Creativity, number> = {
   FAITHFUL: 0.2,
   BALANCED: 0.6,
   EXPRESSIVE: 0.9,

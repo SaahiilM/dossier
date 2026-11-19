@@ -73,20 +73,22 @@ export function SubscriptionProviderSection({
   compact = false,
 }: SubscriptionProviderSectionProps) {
   const track = useTrackSave();
-  const [connection, setConnection] = useState<SubscriptionConnectionView | null>(initial ?? null);
-  const [tab, setTab] = useState<SubscriptionProviderTab>(tabProp ?? "chatgpt");
+  const [connectionUpdate, setConnectionUpdate] = useState<{ initial: typeof initial; view: SubscriptionConnectionView }>();
+  const connection = connectionUpdate?.initial === initial ? connectionUpdate?.view ?? initial ?? null : initial ?? null;
+  const [ownTab, setTab] = useState<SubscriptionProviderTab>("chatgpt");
+  const tab = tabProp ?? ownTab;
   const [selectedSub, setSelectedSub] = useState<string>("");
-  const [modelList, setModelList] = useState<ModelList>({ loading: false, models: [], problem: null });
+  const [modelResponse, setModelResponse] = useState<{ sub: string; result: ModelList }>();
   const [signingIn, setSigningIn] = useState(false);
   const [disconnectSub, setDisconnectSub] = useState<string | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const publish = useCallback(
     (view: SubscriptionConnectionView) => {
-      setConnection(view);
+      setConnectionUpdate({ initial, view });
       onConnectionChange?.(view);
     },
-    [onConnectionChange],
+    [initial, onConnectionChange],
   );
 
   const chooseTab = (next: SubscriptionProviderTab) => {
@@ -95,12 +97,8 @@ export function SubscriptionProviderSection({
   };
 
   useEffect(() => {
-    if (tabProp !== undefined) setTab(tabProp);
-  }, [tabProp]);
-
-  useEffect(() => {
-    if (initial) publish(initial);
-  }, [initial, publish]);
+    if (initial) onConnectionChange?.(initial);
+  }, [initial, onConnectionChange]);
 
   useEffect(() => {
     if (initial !== undefined) return;
@@ -118,23 +116,22 @@ export function SubscriptionProviderSection({
   const phase = connection?.chatGpt.phase ?? "idle";
   const accountForModels = selectedSub || chatGptAccountSub || accounts[0]?.sub || "";
 
+  const modelList: ModelList = !accountForModels || !runtimeAvailable
+    ? { loading: false, models: [], problem: null }
+    : modelResponse?.sub === accountForModels ? modelResponse.result : { loading: true };
+  const connectedAccounts = connection?.chatGpt.accounts;
   useEffect(() => {
     const sub = accountForModels;
-    if (!sub || !runtimeAvailable) {
-      setModelList({ loading: false, models: [], problem: null });
-      return;
-    }
+    if (!sub || !runtimeAvailable) return;
     let current = true;
-    setModelList({ loading: true });
     void listChatGptSubscriptionModels({ sub }).then((result) => {
       if (!current) return;
-      if (!result.ok) setModelList({ loading: false, models: [], problem: result.error });
-      else setModelList({ loading: false, ...result.data });
+      setModelResponse({ sub, result: result.ok ? { loading: false, ...result.data } : { loading: false, models: [], problem: result.error } });
     });
     return () => {
       current = false;
     };
-  }, [accountForModels, accounts, runtimeAvailable]);
+  }, [accountForModels, connectedAccounts, runtimeAvailable]);
 
   const refreshClaude = () => {
     void getClaudeSubscriptionStatus({}).then((result) => {

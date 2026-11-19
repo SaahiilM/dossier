@@ -2,19 +2,11 @@ import "server-only";
 
 import type { Prisma, PrismaClient } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
-import { DEFAULT_BASE_THEME, settingsFromRows, settingValue, type SettingsData } from "@/lib/settings";
+import { LEGACY_SETTING_KEYS, settingsFromRows, settingValue, type SettingsData } from "@/lib/settings";
 
-/**
- * The settings in effect. Nothing in the database ties the base theme
- * setting to its theme, so a deleted custom theme reads as Editorial here.
- */
+/** The settings in effect. Each profile's Base resume settings are its own (src/lib/profiles.ts). */
 export async function loadSettings(db: PrismaClient | Prisma.TransactionClient = prisma): Promise<SettingsData> {
-  const settings = settingsFromRows(await db.setting.findMany());
-  if (settings.baseThemeId !== DEFAULT_BASE_THEME) {
-    const theme = await db.theme.findUnique({ where: { id: settings.baseThemeId }, select: { id: true } });
-    if (!theme) return { ...settings, baseThemeId: DEFAULT_BASE_THEME };
-  }
-  return settings;
+  return settingsFromRows(await db.setting.findMany());
 }
 
 /**
@@ -28,5 +20,16 @@ export async function saveSettings(changes: Partial<SettingsData>, db?: Prisma.T
     const value = settingValue(change);
     if (value === null) await db.setting.deleteMany({ where: { key } });
     else await db.setting.upsert({ where: { key }, create: { key, value }, update: { value } });
+
+    const legacyKey = LEGACY_SETTING_KEYS[key as keyof typeof LEGACY_SETTING_KEYS];
+    if (legacyKey) {
+      if (key === "openrouterScoringModel" && changes.openrouterDecisionModel === undefined) {
+        const legacy = await db.setting.findUnique({ where: { key: legacyKey } });
+        if (legacy?.value.endsWith(":free")) {
+          await db.setting.upsert({ where: { key: "openrouterDecisionModel" }, create: { key: "openrouterDecisionModel", value: legacy.value }, update: {} });
+        }
+      }
+      await db.setting.deleteMany({ where: { key: legacyKey } });
+    }
   }
 }

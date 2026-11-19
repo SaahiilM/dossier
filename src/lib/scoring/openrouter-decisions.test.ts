@@ -2,8 +2,9 @@ import { describe, expect, it, vi } from "vitest";
 
 import { AiError } from "@/lib/ai/errors";
 import { demoProfile } from "@/lib/demo-profile";
+import { DEFAULT_WORKPLACE } from "@/lib/profile-workplace";
 
-import { jevFit, jevParts, jevQuestions } from "./jev";
+import { engineQuestions } from "./questions";
 import {
   DECISION_CATALOG_URL,
   DECISIONS_URL,
@@ -19,7 +20,7 @@ import {
 import { postingLines } from "./posting-lines";
 import { OPENROUTER_DECISION_MODEL } from "./scorers";
 
-const profile = demoProfile();
+const profile = { data: demoProfile(), levels: { from: "senior" as const, to: "lead" as const }, workplace: DEFAULT_WORKPLACE };
 const posting = {
   title: "Senior Product Designer",
   company: "Ledgerly",
@@ -32,12 +33,13 @@ const pin = KNOWN_FREE_DECISION_MODELS[0];
 const lines = postingLines(posting.description);
 
 function answersFor(description = posting.description) {
-  const questions = jevQuestions(postingLines(description));
+  const questions = engineQuestions(postingLines(description));
   return Object.fromEntries(
     Object.entries(questions).map(([id, question]) => {
       if (question.type === "score") return [id, { type: "score", score: question.criteria.length - 1, confidence: 0.9, probabilities: {} }];
-      if (question.type === "noul") return [id, { type: "noul", noul: 0.05 }];
-      return [id, { type: "choice", choice: "required", confidence: 0.9, probabilities: { required: 0.9 } }];
+      if (question.type === "noul") return [id, { type: "noul", noul: id.endsWith("Covered") ? 0.95 : 0.05 }];
+      const choice = id === "seniority" ? "fits" : id === "location" ? "fits" : "must";
+      return [id, { type: "choice", choice, confidence: 0.9, probabilities: { [choice]: 0.9 } }];
     }),
   );
 }
@@ -109,15 +111,14 @@ describe("decision model pin", () => {
 });
 
 describe("scoreWithOpenRouterDecisions", () => {
-  it("posts the Jev questions to the decisions endpoint and keeps the snapshot, tokens, and cost", async () => {
+  it("posts the upstream factor questions to the decisions endpoint and keeps the snapshot, tokens, and cost", async () => {
     const answers = answersFor();
     const { fetchImpl, calls } = fetchOf(decisionJson(pin.canonicalSnapshot, answers, { input_tokens: 40, output_tokens: 6, cost: 0, input_tokens_details: { cached_tokens: 3 } }));
     const onUsage = vi.fn();
     const result = await scoreWithOpenRouterDecisions(posting, profile, { key: "sk-or-test", model: OPENROUTER_DECISION_MODEL, fetchImpl, onUsage, retryDelaysMs: [] });
 
-    expect(result.data).toEqual(jevFit(jevParts(answers, lines)));
-    expect(result.data.score).toBeGreaterThanOrEqual(0);
-    expect(result.data.score).toBeLessThanOrEqual(100);
+    expect(result.answers.requirements).toEqual([{ text: lines[0], mustHave: true, covered: true, evidence: null }]);
+    expect(result.answers.seniority.fit).toBe("fits");
     expect(result.scoredWith).toBe(decisionScoredWith(pin.canonicalSnapshot, 0));
     expect(onUsage).toHaveBeenCalledWith({
       task: "score-posting-openrouter-decisions",
@@ -131,11 +132,12 @@ describe("scoreWithOpenRouterDecisions", () => {
     expect(calls[0].url).not.toContain("chat/completions");
     const init = calls[0].init;
     expect(new Headers(init?.headers).get("authorization")).toBe("Bearer sk-or-test");
-    const body = JSON.parse(String(init?.body)) as { model: string; provider: { allow_fallbacks: boolean }; questions: Record<string, unknown>; state: { candidate: { name?: string } } };
+    const body = JSON.parse(String(init?.body)) as { model: string; provider: { allow_fallbacks: boolean }; questions: Record<string, unknown>; state: { candidate: { name?: string; seniority: { levels: string } } } };
     expect(body.model).toBe(OPENROUTER_DECISION_MODEL);
     expect(body.provider).toEqual({ allow_fallbacks: false });
-    expect(body.questions).toEqual(jevQuestions(lines));
+    expect(body.questions).toEqual(engineQuestions(lines));
     expect(body.state.candidate.name).toBeUndefined();
+    expect(body.state.candidate.seniority.levels).toBe("Senior to Lead or director");
     expect(JSON.stringify(body)).not.toContain("messages");
   });
 
@@ -170,7 +172,7 @@ describe("scoreWithOpenRouterDecisions", () => {
 
   it("refuses an incomplete answer and does not build a score", async () => {
     const answers = answersFor();
-    answers.requirements = { type: "score" };
+    answers.work = { type: "noul" };
     const { fetchImpl } = fetchOf(decisionJson(pin.canonicalSnapshot, answers, { input_tokens: 3, output_tokens: 1, cost: 0 }));
     const onUsage = vi.fn();
     const error = await scoreWithOpenRouterDecisions(posting, profile, { key: "sk-or-test", model: OPENROUTER_DECISION_MODEL, fetchImpl, onUsage, retryDelaysMs: [] }).then(

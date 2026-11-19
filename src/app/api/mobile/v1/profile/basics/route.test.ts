@@ -38,6 +38,13 @@ describe("mobile profile basics", () => {
     expect(await response.json()).toEqual({ basics: { name: "Jane Doe", headline: "Engineer" } });
   });
 
+  it("reads the same default profile as the v1 profile detail route", async () => {
+    const response = await GET(new Request(url));
+
+    expect(response.status).toBe(200);
+    expect(mocks.read).toHaveBeenCalledWith();
+  });
+
   it("rejects empty, unknown, and invalid fields", async () => {
     for (const input of [{}, { role: "Engineer" }, { dob: "yesterday" }]) {
       expect((await PATCH(mutation(input))).status).toBe(400);

@@ -1,7 +1,11 @@
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 
+import type { FoundPosting } from "@/lib/job-search/search";
+import { startJob } from "@/lib/jobs/runner";
+import { keepFound } from "@/lib/library";
+import { copyProfile } from "@/lib/profiles";
 import { saveSettings } from "@/lib/settings-data";
-import { createTestClient, resetDatabase } from "@/test/db";
+import { createTestClient, resetDatabase, TEST_PROFILE_ID } from "@/test/db";
 
 import { seedBuiltIns } from "../../../prisma/seed/built-ins";
 import { seedDemo } from "../../../prisma/seed/demo";
@@ -92,8 +96,19 @@ async function tool(name: string, args: Record<string, unknown> = {}): Promise<{
   return { isError: result.isError ?? false, text, json: json as Record<string, unknown> & unknown[] };
 }
 
-const storeSearch = (postings: unknown[]) =>
-  prisma().postingSearch.create({ data: { source: "JSEARCH", query: { keywords: "designer", place: "Berlin", country: "de", radiusKm: 25, remoteOnly: false, postedWithin: "any" }, postings: postings as object[], found: postings.length, next: "page:2" } });
+/** A kept search with what it found, in the library as a search keeps it (E22-5). */
+const storeSearch = async (postings: unknown[]) => {
+  const search = await prisma().postingSearch.create({
+    data: {
+      source: "JSEARCH",
+      query: { keywords: "designer", place: "Berlin", country: "de", radiusKm: 25, remoteOnly: false, postedWithin: "any" },
+      portals: [{ id: "JSEARCH", status: "done", found: postings.length, next: "page:2", message: null }],
+      found: postings.length,
+    },
+  });
+  await keepFound(search.id, "JSEARCH", postings as FoundPosting[]);
+  return search;
+};
 
 describe("the Claude connector's tools (#221)", () => {
   it("lists the applications, newest first, by status, and reads one without notes, sender or signature", async () => {
@@ -180,6 +195,28 @@ describe("the Claude connector's tools (#221)", () => {
     });
   });
 
+  it("changes a saved Draft in place, and refuses one that was sent", async () => {
+    const saved = await tool("save_application", {
+      posting_text: "Product Designer at Acme",
+      details: { company: "Acme", role: "Product Designer" },
+      resume: { summary: "Designer who ships calm products.", roles: [], skills: ["Figma"] },
+      cover_letter: { paragraphs: [{ text: "I'd like to help Acme." }] },
+      match: [{ requirement: "Figma", result: "covered" }],
+    });
+    const id = saved.json.application_id as string;
+
+    const updated = await tool("update_application", { application_id: id, change: "Warmer summary", resume: { summary: "Designer who ships warm products.", roles: [], skills: ["Figma"] } });
+    expect(updated.json).toMatchObject({ application_id: id, status: "Draft" });
+    expect((await tool("get_application", { id })).json.resume).toContain("Designer who ships warm products.");
+    expect(await prisma().application.count({ where: { company: "Acme" } })).toBe(1);
+    // A part left out stays as it was.
+    expect((await prisma().application.findUniqueOrThrow({ where: { id } })).match).toMatchObject({ items: [{ requirement: "Figma" }] });
+
+    expect(await tool("update_application", { application_id: id, change: "Nothing" })).toMatchObject({ isError: true });
+    await tool("set_application_status", { id, status: "SENT" });
+    expect((await tool("update_application", { application_id: id, change: "Too late", match: [] })).text).toContain("Only a Draft");
+  });
+
   it("has Dossier's own model draft one only when there is one, and says how it's coming along", async () => {
     expect((await tool("draft_application", { posting_text: "Designer at Acme" })).text).toContain("save_application");
     fake.aiUsable = true;
@@ -196,100 +233,39 @@ describe("the Claude connector's tools (#221)", () => {
     expect((await tool("check_draft", { draft_id: job.id })).json).toMatchObject({ status: "done", application_id: ledgerly.id });
   });
 
-  it("reads the dashboard and job agent queue without private notes", async () => {
-    const dashboard = await tool("get_dashboard", {});
-    expect(dashboard.json).toMatchObject({ total: expect.any(Number), by_status: expect.any(Object), link: "https://dossier.example/?period=all" });
-    expect(dashboard.text).not.toContain("Private:");
+  it("reads and writes from the profile asked for by name, or the first (E24-6)", async () => {
+    const backend = await copyProfile(TEST_PROFILE_ID, "Backend");
+    const first = await prisma().profile.findUniqueOrThrow({ where: { id: TEST_PROFILE_ID } });
+    await prisma().profile.update({ where: { id: backend }, data: { headline: "Backend engineer" } });
 
-    const agent = await tool("get_agent_status", {});
-    expect(agent.json).toMatchObject({ enabled: expect.any(Boolean), link: "https://dossier.example/agent" });
+    expect((await tool("get_profile")).json).toMatchObject({ profile: first.name, profiles: [first.name, "Backend"], link: `https://dossier.example/profile?profile=${TEST_PROFILE_ID}` });
+    expect((await tool("get_profile", { profile: "backend" })).json).toMatchObject({ profile: "Backend", headline: "Backend engineer", link: `https://dossier.example/profile?profile=${backend}` });
+    expect((await tool("get_profile", { profile: backend })).json).toMatchObject({ profile: "Backend" });
+    expect(await tool("get_profile", { profile: "Frontend" })).toMatchObject({ isError: true, text: `There's no profile called "Frontend". The profiles are: "${first.name}", "Backend".` });
 
-    const candidate = await prisma().agentCandidate.create({
-      data: {
-        source: "JSEARCH",
-        externalId: "mcp-agent-1",
-        dedupeKey: "mcp-agent-1",
-        title: "MCP Designer",
-        company: "QueueCo",
-        score: 88,
-        reasons: ["Figma"],
-        redFlags: [],
-      },
+    const role = await prisma().experience.findFirstOrThrow({ where: { profileId: backend }, orderBy: { sort: "asc" } });
+    const saved = await tool("save_application", {
+      posting_text: "Backend Engineer at Acme",
+      details: { company: "Acme", role: "Backend Engineer" },
+      resume: { summary: "Engineer who ships calm systems.", roles: [{ id: role.id, bullets: ["Ran the payments platform"] }], skills: [] },
+      cover_letter: { paragraphs: [{ text: "I'd like to help Acme." }] },
+      profile: "Backend",
     });
-    const listed = await tool("list_agent_candidates", { section: "scored", limit: 5 });
-    expect(listed.json.candidates).toEqual(expect.arrayContaining([expect.objectContaining({ id: candidate.id, score: 88 })]));
-
-    const one = await tool("get_agent_candidate", { id: candidate.id });
-    expect(one.json).toMatchObject({ id: candidate.id, reasons: ["Figma"], status: "Scored" });
-    expect(await tool("get_agent_candidate", { id: "gone" })).toMatchObject({ isError: true });
-  });
-
-  it("approves an agent candidate like the Agent screen", async () => {
-    const ledgerly = await prisma().application.findFirstOrThrow({ where: { company: "Ledgerly" } });
-    await prisma().application.update({ where: { id: ledgerly.id }, data: { status: "DRAFT", awaitingReview: true } });
-    const candidate = await prisma().agentCandidate.create({
-      data: {
-        source: "JSEARCH",
-        externalId: "mcp-draft",
-        dedupeKey: "mcp-draft",
-        status: "DRAFTED",
-        applicationId: ledgerly.id,
-        title: "Product Designer",
-        company: "QueueCo",
-        score: 90,
-        reasons: [],
-        redFlags: [],
-      },
-    });
-    expect((await tool("approve_agent_candidate", { candidate_id: candidate.id })).json).toMatchObject({
-      application_id: ledgerly.id,
-      link: `https://dossier.example/applications/${ledgerly.id}`,
-    });
-    expect(await prisma().application.findUniqueOrThrow({ where: { id: ledgerly.id } })).toMatchObject({ awaitingReview: false });
-    expect((await tool("list_applications", { status: "DRAFT", limit: 50 })).json).toEqual(
-      expect.arrayContaining([expect.objectContaining({ id: ledgerly.id })]),
-    );
-    expect(await tool("approve_agent_candidate", { candidate_id: candidate.id })).toMatchObject({ isError: true });
-  });
-
-  it("edits a Draft application's unit and keeps agent drafts off the tracker until approved", async () => {
-    const ledgerly = await prisma().application.findFirstOrThrow({ where: { company: "Ledgerly" } });
-    await prisma().application.update({ where: { id: ledgerly.id }, data: { awaitingReview: true, status: "DRAFT" } });
-    await prisma().agentCandidate.create({
-      data: {
-        source: "JSEARCH",
-        externalId: "mcp-edit",
-        dedupeKey: "mcp-edit",
-        status: "DRAFTED",
-        applicationId: ledgerly.id,
-        title: "X",
-        company: "Y",
-        score: 80,
-        reasons: [],
-        redFlags: [],
-      },
-    });
-    expect(await tool("update_application_unit", { id: ledgerly.id, document: "RESUME", unit_id: "summary", text: "Nope", expected: "" })).toMatchObject({
+    expect(await prisma().application.findUniqueOrThrow({ where: { id: saved.json.application_id as string } })).toMatchObject({ profileId: backend });
+    expect(await tool("save_application", { posting_text: "x", details: { company: "A", role: "B" }, resume: { summary: "", roles: [], skills: [] }, cover_letter: { paragraphs: [{ text: "Hi" }] }, profile: "Frontend" })).toMatchObject({
       isError: true,
-      text: expect.stringContaining("Agent screen"),
     });
 
-    await prisma().application.update({ where: { id: ledgerly.id }, data: { awaitingReview: false } });
-    const read = await tool("get_application", { id: ledgerly.id });
-    const summary = /## Summary\n([\s\S]*?)(\n## |$)/.exec(read.json.resume as string)?.[1]?.trim() ?? "";
-    const edited = await tool("update_application_unit", { id: ledgerly.id, document: "RESUME", unit_id: "summary", text: "  Updated summary.  ", expected: summary });
-    expect(edited.json).toMatchObject({ changed: true, text: "Updated summary." });
-    expect(
-      await tool("update_application_unit", { id: ledgerly.id, document: "RESUME", unit_id: "summary", text: "Stale edit.", expected: summary }),
-    ).toMatchObject({ isError: true, text: expect.stringContaining("changed since you read it") });
-    const again = await tool("update_application_unit", { id: ledgerly.id, document: "RESUME", unit_id: "summary", text: "Updated summary.", expected: "Updated summary." });
-    expect(again.json).toMatchObject({ changed: false });
+    // Scores are kept per profile (E25-5).
+    const search = await storeSearch([found("p1", "Backend Engineer")]);
+    expect((await tool("save_job_scores", { search_id: search.id, scores: [{ number: 1, score: 81, reasons: ["Go at Northwind."] }], profile: "Backend" })).isError).toBe(false);
+    expect(await prisma().postingScore.findMany({ select: { externalId: true, profileId: true, score: true } })).toEqual([{ externalId: "p1", profileId: backend, score: 81 }]);
 
-    await prisma().application.update({ where: { id: ledgerly.id }, data: { status: "SENT" } });
-    expect(await tool("update_application_unit", { id: ledgerly.id, document: "RESUME", unit_id: "summary", text: "X", expected: "Updated summary." })).toMatchObject({ isError: true });
-    expect(
-      await tool("update_application_unit", { id: ledgerly.id, document: "COVER_LETTER", unit_id: "sender", text: "Hi", expected: "" }),
-    ).toMatchObject({ isError: true, text: expect.stringContaining("contact details") });
+    fake.aiUsable = true;
+    await tool("draft_application", { posting_text: "Backend Engineer at Acme", profile: "Backend" });
+    expect(vi.mocked(startJob)).toHaveBeenLastCalledWith(expect.anything(), expect.objectContaining({ profileId: backend }));
+    await tool("draft_application", { posting_text: "Backend Engineer at Acme" });
+    expect(vi.mocked(startJob)).toHaveBeenLastCalledWith(expect.anything(), expect.objectContaining({ profileId: TEST_PROFILE_ID }));
   });
 
   it("shows more of a search, and scores postings handed over by id", async () => {

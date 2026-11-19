@@ -35,7 +35,7 @@ import {
   toProfile,
   wilson,
 } from "./harness.ts";
-import { JEV_WEIGHTS, jevParts as partsOf, jevScore as scoreOf } from "../src/lib/scoring/jev.ts";
+import { JEV_WEIGHTS, jevParts as partsOf, jevScore as scoreOf } from "../src/lib/scoring/legacy-jev.ts";
 
 const score = (value: number, confidence = 0.9) => ({ type: "score" as const, score: value, confidence, probabilities: {} });
 const noul = (value: number) => ({ type: "noul" as const, noul: value });

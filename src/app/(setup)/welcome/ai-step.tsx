@@ -163,7 +163,6 @@ function ChoicePanel({
 
   useEffect(() => {
     if (!choice.subscription) return;
-    setModel(savedModel);
     void saveAiProvider({ provider: choice.provider, baseUrl: "", model: savedModel });
   }, [choice.id, choice.provider, choice.subscription, savedModel]);
 
