@@ -74,7 +74,7 @@ describe("profileRows", () => {
   });
 
   it("keeps Basics and the Facts where they were put", () => {
-    const order = withProfileRows(DEFAULT_SECTION_LAYOUT.order, ["summary", "facts", ...BUILT_IN_SECTIONS.slice(1), "basics"]);
+    const order = withProfileRows(DEFAULT_SECTION_LAYOUT.order, ["summary", "facts", ...BUILT_IN_SECTIONS.slice(1), "workAuthorization", "basics"]);
     expect(profileRows(order).slice(0, 2)).toEqual(["summary", "facts"]);
     expect(profileRows(order).at(-1)).toBe("basics");
   });

@@ -73,6 +73,7 @@ describe("stored settings", () => {
       decisionsKeyEnc: null,
       openrouterScoringKeyEnc: null,
       openrouterScoringModel: null,
+      openrouterDecisionModel: null,
       agentEnabled: false,
       agentHour: 7,
       agentMinScore: 70,

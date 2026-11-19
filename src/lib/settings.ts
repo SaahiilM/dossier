@@ -229,6 +229,7 @@ const settingsSchema = z.object({
   openrouterScoringKeyEnc: z.string().nullable().catch(null),
   /** The OpenRouter model that scores; null for the default (OPENROUTER_SCORING_MODEL). */
   openrouterScoringModel: z.string().trim().min(1).max(200).nullable().catch(null),
+  openrouterDecisionModel: z.string().trim().min(1).max(200).nullable().catch(null),
   // Job agent (E16): recurring searches, run once a day. Off until turned on.
   // It asks the source in Settings → Job search, with its key.
   agentEnabled: flag(false),
@@ -343,6 +344,9 @@ export function settingsFromRows(rows: readonly { key: string; value: string }[]
   // installs' OpenRouter values readable until they are next saved.
   for (const [current, legacy] of Object.entries(LEGACY_SETTING_KEYS)) {
     if (!(current in values) && legacy in values) values[current] = values[legacy]!;
+  }
+  if (!("openrouterDecisionModel" in values) && values.openRouterScoringModel?.endsWith(":free")) {
+    values.openrouterDecisionModel = values.openRouterScoringModel;
   }
   return settingsSchema.parse(values);
 }

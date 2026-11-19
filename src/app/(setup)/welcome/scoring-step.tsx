@@ -7,7 +7,7 @@ import { toastResult } from "@/components/toast";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { OPENROUTER_SCORING_MODEL, SCORER_INFO, SCORERS, type Scorer, type ScoringView } from "@/lib/scoring/scorers";
+import { OPENROUTER_DECISION_MODEL, OPENROUTER_SCORING_MODEL, SCORER_INFO, SCORERS, type Scorer, type ScoringView } from "@/lib/scoring/scorers";
 import { WIKI } from "@/lib/setup/instructions";
 
 import { saveOpenRouterScoringModel, saveScorer, saveScoringKey, testScoringModel } from "../../(app)/settings/actions";
@@ -31,7 +31,8 @@ export function ScoringStep({ initial }: { initial: ScoringView }) {
   const router = useRouter();
   const [scorer, setScorer] = useState<Scorer>(initial.scorer);
   const [key, setKey] = useState("");
-  const [model, setModel] = useState(initial.openrouterModel === OPENROUTER_SCORING_MODEL ? "" : initial.openrouterModel);
+  const defaultModel = scorer === "OPENROUTER_DECISIONS" ? OPENROUTER_DECISION_MODEL : OPENROUTER_SCORING_MODEL;
+  const [model, setModel] = useState(initial.openrouterModel === defaultModel ? "" : initial.openrouterModel);
   const [status, setStatus] = useState<Status>({ state: "idle" });
   const info = SCORER_INFO[scorer];
 
@@ -39,13 +40,18 @@ export function ScoringStep({ initial }: { initial: ScoringView }) {
     setScorer(next);
     setKey("");
     setStatus({ state: "idle" });
-    if (toastResult(await saveScorer({ scorer: next })).ok) router.refresh();
+    const result = toastResult(await saveScorer({ scorer: next }));
+    if (result.ok) {
+      const fallback = next === "OPENROUTER_DECISIONS" ? OPENROUTER_DECISION_MODEL : OPENROUTER_SCORING_MODEL;
+      setModel(result.data.openrouterModel === fallback ? "" : result.data.openrouterModel);
+      router.refresh();
+    }
   };
 
   const check = async () => {
     setStatus({ state: "checking" });
     if (key.trim() && !toastResult(await saveScoringKey({ scorer, change: { action: "set", value: key } })).ok) return setStatus({ state: "idle" });
-    if (scorer === "OPENROUTER" && !toastResult(await saveOpenRouterScoringModel({ model })).ok) return setStatus({ state: "idle" });
+    if ((scorer === "OPENROUTER" || scorer === "OPENROUTER_DECISIONS") && !toastResult(await saveOpenRouterScoringModel({ model, scorer })).ok) return setStatus({ state: "idle" });
     const result = toastResult(await testScoringModel({ scorer }));
     if (!result.ok) return setStatus({ state: "idle" });
     if (!result.data.connected) return setStatus({ state: "failed", message: result.data.message });
@@ -82,11 +88,11 @@ export function ScoringStep({ initial }: { initial: ScoringView }) {
               value={key}
               onChange={(event) => setKey(event.target.value)}
             />
-            {scorer === "OPENROUTER" && (
+            {(scorer === "OPENROUTER" || scorer === "OPENROUTER_DECISIONS") && (
               <Input
                 label="Model"
-                placeholder={OPENROUTER_SCORING_MODEL}
-                hint={`An OpenRouter model that answers in JSON, by its id. Empty for ${OPENROUTER_SCORING_MODEL}, a cheap one that does.`}
+                placeholder={defaultModel}
+                hint={`Enter an OpenRouter model ID. Leave empty to use ${defaultModel}.`}
                 value={model}
                 onChange={(event) => setModel(event.target.value)}
               />

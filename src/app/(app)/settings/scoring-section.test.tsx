@@ -25,7 +25,7 @@ describe("ScoringSection (#274)", () => {
   it("offers the scoring models on the list, the AI model by default, with nothing about TypeSafe", async () => {
     render(<ScoringSection initial={ai} />);
     expect(screen.getByRole("heading", { name: "Scoring" })).toBeInTheDocument();
-    expect(screen.getAllByRole("radio").map((radio) => radio.getAttribute("aria-label"))).toEqual(["Your AI model", "Jev by TypeSafe", "OpenAI Decisions", "OpenRouter"]);
+    expect(screen.getAllByRole("radio").map((radio) => radio.getAttribute("aria-label"))).toEqual(["Your AI model", "Jev by TypeSafe", "OpenAI Decisions", "OpenRouter Decisions", "OpenRouter"]);
     expect(screen.getByRole("radio", { name: "Your AI model" })).toBeChecked();
     expect(screen.queryByRole("note")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("TypeSafe key")).not.toBeInTheDocument();
@@ -88,12 +88,12 @@ describe("ScoringSection (#274)", () => {
   it("offers OpenAI Decisions and OpenRouter, OpenRouter with its model (E25-3, E25-4)", async () => {
     const user = userEvent.setup();
     render(<ScoringSection initial={{ scorer: "OPENROUTER", keys: { JEV: "none", DECISIONS: "none", OPENROUTER: "set" }, openrouterModel: "openai/gpt-6-luna" }} />);
-    expect(screen.getAllByRole("radio").map((radio) => radio.getAttribute("aria-label"))).toEqual(["Your AI model", "Jev by TypeSafe", "OpenAI Decisions", "OpenRouter"]);
+    expect(screen.getAllByRole("radio").map((radio) => radio.getAttribute("aria-label"))).toEqual(["Your AI model", "Jev by TypeSafe", "OpenAI Decisions", "OpenRouter Decisions", "OpenRouter"]);
     expect(screen.getByRole("note")).toHaveTextContent("Dossier asks OpenRouter to use only companies that don't keep or train on it.");
     expect(screen.getByLabelText("OpenRouter key")).toHaveAttribute("placeholder", "Saved · type a new key to replace it");
     vi.mocked(saveOpenRouterScoringModel).mockResolvedValueOnce({ ok: true, data: { scorer: "OPENROUTER", keys: { OPENROUTER: "set" }, openrouterModel: "mistralai/mistral-small-2603" } });
     await user.type(screen.getByLabelText("Model"), "mistralai/mistral-small-2603");
     await user.tab();
-    expect(saveOpenRouterScoringModel).toHaveBeenCalledWith({ model: "mistralai/mistral-small-2603" });
+    expect(saveOpenRouterScoringModel).toHaveBeenCalledWith({ model: "mistralai/mistral-small-2603", scorer: "OPENROUTER" });
   });
 });

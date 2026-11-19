@@ -52,7 +52,8 @@ describe("settings and themes", () => {
   });
 
   it("reads legacy OpenRouter keys and removes their aliases as the canonical fields are saved", async () => {
-    const encryptedKey = encryptSecret(OPENROUTER_SCORING_KEY, "sk-or-existing");
+    const secret = "dossier-test-secret-for-openrouter-settings";
+    const encryptedKey = encryptSecret(OPENROUTER_SCORING_KEY, "sk-or-existing", secret);
     await prisma().setting.createMany({
       data: [
         { key: "openRouterScoringKeyEnc", value: encryptedKey },
@@ -62,7 +63,7 @@ describe("settings and themes", () => {
 
     const legacy = await loadSettings();
     expect(legacy).toMatchObject({ openrouterScoringModel: "legacy/model", openrouterScoringKeyEnc: encryptedKey });
-    expect(decryptSecret(OPENROUTER_SCORING_KEY, legacy.openrouterScoringKeyEnc!)).toBe("sk-or-existing");
+    expect(decryptSecret(OPENROUTER_SCORING_KEY, legacy.openrouterScoringKeyEnc!, secret)).toBe("sk-or-existing");
 
     await saveSettings({ openrouterScoringModel: "current/model", openrouterScoringKeyEnc: legacy.openrouterScoringKeyEnc });
     expect(await prisma().setting.findMany({ where: { key: { in: ["openRouterScoringKeyEnc", "openRouterScoringModel"] } }, select: { key: true, value: true } })).toEqual([]);

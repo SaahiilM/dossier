@@ -291,7 +291,7 @@ describe("job search settings (E14-4, E22-3)", () => {
 
 describe("scoring settings (#274, E25-2)", () => {
   it("saves the scoring model, and its key encrypted for it only", async () => {
-    const none = { JEV: "none", DECISIONS: "none", OPENROUTER: "none" };
+    const none = { JEV: "none", DECISIONS: "none", OPENROUTER: "none", OPENROUTER_DECISIONS: "none" };
     expect(await saveScorer({ scorer: "JEV" })).toEqual({ ok: true, data: { scorer: "JEV", keys: none, openrouterModel: "openai/gpt-6-luna" } });
     expect(await saveScoringKey({ scorer: "JEV", change: { action: "set", value: " ts_secret " } })).toMatchObject({ ok: true, data: { scorer: "JEV", keys: { ...none, JEV: "set" } } });
     const saved = await settings();

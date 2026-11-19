@@ -42,7 +42,7 @@ const SECTION_NAMES: Record<BuiltInSection, string> = {
  * header, and the Facts are never printed. They keep a place in the order for
  * the list's sake, and resumes don't draw them.
  */
-const PROFILE_ONLY_SECTIONS = ["basics", "facts"] as const;
+const PROFILE_ONLY_SECTIONS = ["basics", "facts", "workAuthorization"] as const;
 
 /** A custom section's key (#298). */
 export const customKey = (sectionId: string) => `custom:${sectionId}`;

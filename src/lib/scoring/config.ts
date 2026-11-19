@@ -39,8 +39,8 @@ const FROM_ENV: Record<NonNullable<Env["DOSSIER_SCORER"]>, Scorer> = {
   openrouter: "OPENROUTER",
 };
 
-type SavedKeys = Pick<SettingsData, "scorer" | "typesafeKeyEnc"> & Partial<Pick<SettingsData, "decisionsKeyEnc" | "openrouterScoringKeyEnc" | "openrouterScoringModel" | "openRouterScoringKeyEnc" | "openRouterScoringModel">>;
-type KeyEnv = Pick<Env, "DOSSIER_SCORER" | "DOSSIER_TYPESAFE_KEY">;
+type SavedKeys = Pick<SettingsData, "scorer" | "typesafeKeyEnc"> & Partial<Pick<SettingsData, "decisionsKeyEnc" | "openrouterScoringKeyEnc" | "openrouterScoringModel" | "openrouterDecisionModel">> & { openRouterScoringKeyEnc?: string | null; openRouterScoringModel?: string | null };
+type KeyEnv = Pick<Env, "DOSSIER_SCORER" | "DOSSIER_TYPESAFE_KEY"> & Partial<Pick<Env, "DOSSIER_OPENROUTER_SCORING_KEY" | "DOSSIER_OPENROUTER_SCORING_MODEL" | "DOSSIER_OPENROUTER_SCORING_KEY_SOURCE" | "OPENROUTER_API_KEY">>;
 
 export function resolveScoringConfig(saved: SavedKeys, source: KeyEnv, secret?: string): ScoringConfig {
   const scorer = saved.scorer ?? (source.DOSSIER_SCORER ? FROM_ENV[source.DOSSIER_SCORER] : "AI");
@@ -61,11 +61,13 @@ export function resolveScoringConfig(saved: SavedKeys, source: KeyEnv, secret?: 
       }
       continue;
     }
-    const fromEnv = info.envName ? source[info.envName] : undefined;
+    const fromEnv = id === "OPENROUTER" || id === "OPENROUTER_DECISIONS"
+      ? source.DOSSIER_OPENROUTER_SCORING_KEY ?? (source.DOSSIER_OPENROUTER_SCORING_KEY_SOURCE === "openrouter_api_key" ? source.OPENROUTER_API_KEY : undefined)
+      : info.envName ? source[info.envName] : undefined;
     keys[id] = fromEnv ? { key: fromEnv, keyState: "env" } : { key: null, keyState: "none" };
   }
-  const decisionModel = saved.openRouterScoringModel ?? OPENROUTER_DECISION_MODEL;
-  const chatModel = saved.openrouterScoringModel ?? OPENROUTER_SCORING_MODEL;
+  const decisionModel = saved.openrouterDecisionModel ?? saved.openRouterScoringModel ?? source.DOSSIER_OPENROUTER_SCORING_MODEL ?? OPENROUTER_DECISION_MODEL;
+  const chatModel = saved.openrouterScoringModel ?? source.DOSSIER_OPENROUTER_SCORING_MODEL ?? OPENROUTER_SCORING_MODEL;
   return { scorer, saved: saved.scorer !== null, keys, openrouterModel: scorer === "OPENROUTER_DECISIONS" ? decisionModel : chatModel };
 }
 

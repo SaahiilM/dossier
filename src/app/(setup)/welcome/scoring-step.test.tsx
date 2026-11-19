@@ -48,7 +48,7 @@ describe("setup guide ScoringStep (E21-4)", () => {
     await user.type(screen.getByLabelText(SCORER_INFO.OPENROUTER.key!.label), "sk-or-test");
     await user.click(screen.getByRole("button", { name: "Check it" }));
     expect(saveScoringKey).toHaveBeenCalledWith({ scorer: "OPENROUTER", change: { action: "set", value: "sk-or-test" } });
-    expect(saveOpenRouterScoringModel).toHaveBeenCalledWith({ model: "" });
+    expect(saveOpenRouterScoringModel).toHaveBeenCalledWith({ model: "", scorer: "OPENROUTER" });
     expect(testScoringModel).toHaveBeenCalledWith({ scorer: "OPENROUTER" });
     expect(await screen.findByText(`It works: ${SCORER_INFO.OPENROUTER.name} answered.`)).toBeInTheDocument();
   });

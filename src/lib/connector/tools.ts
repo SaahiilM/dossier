@@ -6,7 +6,7 @@ import { z } from "zod";
 import { AgentCandidateStatus, ApplicationStatus, DocumentKind } from "@/generated/prisma/enums";
 import { candidateCoverage, stringsOf } from "@/lib/agent/candidates";
 import { approveCandidate } from "@/lib/agent/draft";
-import { countAgentQueue, loadAgentView } from "@/lib/agent/view";
+import { agentQueueFitSummary, countAgentQueue, loadAgentView } from "@/lib/agent/view";
 import { ActionError } from "@/lib/action";
 import { DASHBOARD_PERIODS, type DashboardPeriod } from "@/lib/dashboard";
 import { loadDashboard } from "@/lib/dashboard-data";
@@ -657,12 +657,15 @@ export function createDossierServer(origin: string): McpServer {
       annotations: { readOnlyHint: true },
     },
     async () => {
-      const [view, queue] = await Promise.all([loadAgentView(), countAgentQueue()]);
+      const [view, queue, fitSummary] = await Promise.all([loadAgentView(), countAgentQueue(), agentQueueFitSummary()]);
       return text({
         enabled: view.enabled,
         auto_draft: view.autoDraft,
         minimum_coverage: view.covers,
         queue_badge: queue,
+        queue_score_stale: fitSummary.stale,
+        queue_needs_review: fitSummary.needsReview,
+        queue_auto_draft_blocked: fitSummary.autoDraftBlocked,
         drafts_awaiting_review: view.drafts.length,
         scored_in_queue: view.finds.length,
         below_minimum: view.skipped.filter((candidate) => candidate.coverage.total > 0).length,

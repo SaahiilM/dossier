@@ -10,7 +10,7 @@ import { toastResult } from "@/components/toast";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { OPENROUTER_SCORING_MODEL, SCORER_INFO, SCORERS, type Scorer, type ScoringView } from "@/lib/scoring/scorers";
+import { OPENROUTER_DECISION_MODEL, OPENROUTER_SCORING_MODEL, SCORER_INFO, SCORERS, type Scorer, type ScoringView } from "@/lib/scoring/scorers";
 import { cn } from "@/lib/cn";
 
 import { saveOpenRouterScoringModel, saveScorer, saveScoringKey, testScoringModel } from "./actions";
@@ -33,6 +33,7 @@ export function ScoringSection({ initial }: { initial: ScoringView }) {
   const [view, setView] = useState(initial);
   const [connection, setConnection] = useState<Connection>({ status: "untested" });
 
+  const defaultModel = view.scorer === "OPENROUTER_DECISIONS" ? OPENROUTER_DECISION_MODEL : OPENROUTER_SCORING_MODEL;
   const apply = (result: Awaited<ReturnType<typeof saveScorer>>) => {
     if (result.ok) setView(result.data);
     return result.ok;
@@ -103,16 +104,17 @@ export function ScoringSection({ initial }: { initial: ScoringView }) {
         onSaveKey={saveKey}
         onTest={() => void test()}
         model={
-          view.scorer === "OPENROUTER" ? (
+          view.scorer === "OPENROUTER" || view.scorer === "OPENROUTER_DECISIONS" ? (
             <Input
+              key={`${view.scorer}:${view.openrouterModel}`}
               label="Model"
-              hint={`An OpenRouter model that answers in JSON, by its id. Empty for ${OPENROUTER_SCORING_MODEL}.`}
-              defaultValue={view.openrouterModel === OPENROUTER_SCORING_MODEL ? "" : view.openrouterModel}
-              placeholder={OPENROUTER_SCORING_MODEL}
+              hint={`Enter an OpenRouter model ID. Leave empty to use ${defaultModel}.`}
+              defaultValue={view.openrouterModel === defaultModel ? "" : view.openrouterModel}
+              placeholder={defaultModel}
               onBlur={(event) => {
-                if (event.target.value.trim() === (view.openrouterModel === OPENROUTER_SCORING_MODEL ? "" : view.openrouterModel)) return;
+                if (event.target.value.trim() === (view.openrouterModel === defaultModel ? "" : view.openrouterModel)) return;
                 setConnection({ status: "untested" });
-                void track(saveOpenRouterScoringModel({ model: event.target.value })).then((result) => apply(toastResult(result)));
+                void track(saveOpenRouterScoringModel({ model: event.target.value, scorer: view.scorer === "OPENROUTER_DECISIONS" ? "OPENROUTER_DECISIONS" : "OPENROUTER" })).then((result) => apply(toastResult(result)));
               }}
             />
           ) : null

@@ -31,7 +31,7 @@ import { disconnectGoogle } from "@/lib/google/account";
 import { prisma } from "@/lib/prisma";
 import { loadScoringConfig, SCORER_KEY_CONTEXT, scoringView } from "@/lib/scoring/config";
 import { testScorer } from "@/lib/scoring";
-import { SCORER_INFO, SCORERS } from "@/lib/scoring/scorers";
+import { OPENROUTER_DECISION_MODEL, SCORER_INFO, SCORERS } from "@/lib/scoring/scorers";
 import { applySecretChange, JOB_SOURCE_KEY } from "@/lib/secrets";
 
 import { seedBuiltIns } from "../../../../prisma/seed/built-ins";
@@ -384,8 +384,13 @@ export const saveScoringKey = action(
 );
 
 /** The OpenRouter model that scores (E25-4); empty for the default. */
-export const saveOpenRouterScoringModel = action(z.object({ model: z.string().trim().max(200) }), async ({ model }) => {
-  await saveSettings({ openrouterScoringModel: model || null });
+export const saveOpenRouterScoringModel = action(z.object({
+  model: z.string().trim().max(200),
+  scorer: z.enum(["OPENROUTER", "OPENROUTER_DECISIONS"]).default("OPENROUTER"),
+}), async ({ model, scorer }) => {
+  await saveSettings(scorer === "OPENROUTER_DECISIONS"
+    ? { openrouterDecisionModel: model || OPENROUTER_DECISION_MODEL }
+    : { openrouterScoringModel: model || null });
   return loadScoringView();
 });
 

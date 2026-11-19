@@ -135,7 +135,7 @@ describe("parseEnv", () => {
       'DOSSIER_OPENROUTER_SCORING_KEY_SOURCE must be scoring or openrouter_api_key (got "yes").',
     ]);
     expect(problems({ ...valid, DOSSIER_SCORER: "cascade" })).toEqual([
-      'DOSSIER_SCORER must be one of ai, jev, openrouter, openrouter-decisions (got "cascade").',
+      'DOSSIER_SCORER must be one of ai, jev, openrouter, openrouter-decisions, openai-decisions (got "cascade").',
     ]);
   });
 

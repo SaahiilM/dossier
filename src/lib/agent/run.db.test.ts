@@ -501,7 +501,7 @@ describe("runAgentScan (E16-3)", () => {
   });
 
   it("holds the daily limit from its own record, whatever the task-data sweep deletes", async () => {
-    await saveSettings({ jobRetentionHours: 1 });
+    await saveSettings({ jobRetentionHours: 1, browserTimeZone: "UTC" });
     for (const hours of [0, 2, 4]) {
       // Each run's Job row, as the runner leaves it, which the sweep deletes an hour later.
       const at = new Date(now.getTime() + hours * hour);

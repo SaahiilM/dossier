@@ -22,6 +22,14 @@ export async function saveSettings(changes: Partial<SettingsData>, db?: Prisma.T
     else await db.setting.upsert({ where: { key }, create: { key, value }, update: { value } });
 
     const legacyKey = LEGACY_SETTING_KEYS[key as keyof typeof LEGACY_SETTING_KEYS];
-    if (legacyKey) await db.setting.deleteMany({ where: { key: legacyKey } });
+    if (legacyKey) {
+      if (key === "openrouterScoringModel" && changes.openrouterDecisionModel === undefined) {
+        const legacy = await db.setting.findUnique({ where: { key: legacyKey } });
+        if (legacy?.value.endsWith(":free")) {
+          await db.setting.upsert({ where: { key: "openrouterDecisionModel" }, create: { key: "openrouterDecisionModel", value: legacy.value }, update: {} });
+        }
+      }
+      await db.setting.deleteMany({ where: { key: legacyKey } });
+    }
   }
 }

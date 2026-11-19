@@ -59,7 +59,7 @@ describe("Jump to's search (E27-6)", () => {
     expect(labels(await searchJump("experience"))).toMatchObject({ Profiles: ["Experience"] });
     expect((await searchJump("experience")).find((group) => group.label === "Profiles")!.results[0].href).toBe("/profile?section=experience");
     expect(labels(await searchJump("google"))).toMatchObject({ Settings: ["Google"] });
-    expect(labels(await searchJump("inbox"))).toMatchObject({ Screens: ["Inbox"] });
+    expect(labels(await searchJump("inbox"))).toMatchObject({ Screens: ["Inbox", "Capture Inbox"] });
   });
 
   it("says nothing when nothing matches", async () => {
