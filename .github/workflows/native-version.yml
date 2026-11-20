@@ -20,24 +20,37 @@ jobs:
         with:
           node-version: 24
           package-manager-cache: false
-      - name: Require native change notes
-        if: github.event_name == 'pull_request'
+      - name: Identify native release changes
+        id: native
         env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
-          base=$(git merge-base "$BASE_SHA" "$HEAD_SHA")
+          if [[ "$BASE_SHA" == 0000000000000000000000000000000000000000 ]]; then
+            exit 0
+          fi
+          base="$BASE_SHA"
+          if [[ "$GITHUB_EVENT_NAME" == pull_request ]]; then
+            base=$(git merge-base "$BASE_SHA" "$HEAD_SHA")
+          fi
           if ! git diff --quiet "$base" "$HEAD_SHA" -- ios ':(exclude)ios/README.md' ':(exclude)ios/CHANGELOG.md' scripts/build-native-ios.sh src/app/api/mobile src/lib/mobile; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
             if git diff --quiet "$base" "$HEAD_SHA" -- ios/CHANGELOG.md; then
-              echo "::error file=ios/CHANGELOG.md::Describe the native or mobile API changes in Unreleased."
+              echo "::error file=ios/CHANGELOG.md::Add personal release notes for the native or mobile API change."
               exit 1
             fi
-            git show "$HEAD_SHA:ios/CHANGELOG.md" | grep -Fx '## Unreleased' >/dev/null
+            git show "$HEAD_SHA:ios/CHANGELOG.md" | grep -Fx '## Personal release notes' >/dev/null
           fi
       - name: Record source and native build versions
+        env:
+          NATIVE_CHANGED: ${{ steps.native.outputs.changed }}
         run: |
           {
-            echo '### Dossier build identity'
+            if [[ "$GITHUB_EVENT_NAME" == push && "$NATIVE_CHANGED" == true ]]; then
+              echo '### Personal iOS source release'
+            else
+              echo '### Dossier build identity'
+            fi
             echo
             echo '```'
             scripts/build-native-ios.sh --version

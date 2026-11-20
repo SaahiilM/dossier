@@ -36,20 +36,22 @@ for signing, device installation, and Share Extension requirements.
 ## Releases and versioning
 
 See the [native changelog](CHANGELOG.md) for merged work and distribution history.
+This app is for personal use and is installed directly on the owner's iPhone.
+Every merge to main that changes iOS or its mobile API is a personal source release.
 
 | Identifier | Rule |
 | --- | --- |
 | Upstream | Keep the root `package.json` version aligned with the upstream release incorporated into fork main. Fork-only changes leave it alone. |
 | Fork | `<upstream>+fork.<12-character commit SHA>` identifies the exact fork revision. Server health retains the full SHA in `build`. |
-| iOS release | `MARKETING_VERSION` in `ios/project.yml`. Bump patch for fixes, minor for backward-compatible features, and major when releasing a breaking native change. Regenerate the Xcode project after a bump. |
+| iOS version | `MARKETING_VERSION` in `ios/project.yml`. Keep it stable across routine personal builds. When intentionally changing it, regenerate the Xcode project. |
 | iOS build | The number of first-parent commits at the source revision. It advances on every merge to main and is shared by the app and extension. Rebuilding the same commit uses the same build number. |
 
-The native version workflow records the tuple on each push to main. PRs
-changing native code, configuration, or the mobile API update the changelog
-under Unreleased. List the specific changes and checks, including any
-server version required by an iOS feature.
+The native version workflow records the tuple on each push to main and
+identifies pushes that contain a personal iOS release. Add notes for native
+code, configuration, or mobile API changes under **Personal release notes**
+in the same PR. Note any server version required by an iOS feature.
 
-Use the versioned build command for device and TestFlight builds. Run it
+Use the versioned build command for the personal iPhone. Run it
 from a clean checkout of the intended main commit with full Git history.
 It requires Node.js to read the upstream version from `package.json`.
 
@@ -59,8 +61,8 @@ scripts/build-native-ios.sh -configuration Debug \
   -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO build
 ```
 
-Pass the usual Xcode signing, destination, or archive arguments to the same
-script for distribution. Direct Xcode builds use development defaults.
+Pass the usual Xcode signing and device destination arguments to the same
+script for a device build. Direct Xcode builds use development defaults.
 The wrapper marks a modified checkout with `.dirty` in its fork identity.
 Open **About Dossier** from the iOS sign-in screen or tap the info button
 in Settings. The app's upstream baseline describes its source tree.
@@ -69,6 +71,5 @@ On the web, including the Home Screen app, use **Settings → About**.
 In the desktop app, **Help → About** identifies the desktop build and
 **Settings → About** identifies its server.
 
-After an actual install or TestFlight upload, record the distributed iOS
-version, build number, full source SHA, upstream baseline, channel, and
-verification in the changelog. Move the shipped entries out of Unreleased.
+After installing on the phone, record its iOS version, build number, full
+source SHA, upstream baseline, and verification in the changelog.
