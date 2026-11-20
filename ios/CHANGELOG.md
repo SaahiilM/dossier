@@ -31,6 +31,13 @@ installation date cannot be reconstructed from the bundle.
 
 ## Distribution history
 
+### iOS 0.1.0 (56) · 2026-11-20 · personal iPhone
+
+- Source `9f5c2700c3367ab1a8679a11cbb5fea5bf60f095`. Upstream 1.15.1.
+- Includes the Settings toolbar fix and the book icon for Setup Guide.
+- Simulator build passed. The signed app-only build installed on the
+  iPhone 16 Pro Max, which reported version 0.1.0 and build 56.
+
 ### iOS 0.1.0 (54) · 2026-11-20 · test iPhone
 
 - Source `80427c5626c3bb7fb3294a236b910d1ce1cfb96a`. Upstream 1.15.1.
