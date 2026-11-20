@@ -1,13 +1,15 @@
 # Native Dossier changelog
 
-Add native app and mobile API changes under **Unreleased** in the same PR.
-When a build reaches a device or TestFlight, record the date, iOS version and
-build number, fork SHA, upstream baseline, distribution channel, and checks
-run. See the [versioning rules](README.md#releases-and-versioning).
+Add native app and mobile API changes under **Personal release notes** in the
+same PR. When it merges to main, its notes and build identity are the source
+release record. Record actual phone installs separately, with the date, iOS
+version and build number, fork SHA, upstream baseline, and checks run.
+See the [versioning rules](README.md#releases-and-versioning).
 
-## Unreleased
+## Personal release notes
 
-No unreleased native changes.
+- Fix the blank action in the Settings toolbar and put a labeled Edit profile
+  basics button under Your profile. Use a book icon for the setup guide.
 
 ## Merged history
 

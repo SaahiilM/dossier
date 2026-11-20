@@ -21,9 +21,12 @@ struct ProfileView: View {
                                     .font(.system(.title2, design: .serif).weight(.semibold))
                                     .foregroundStyle(DossierPalette.ink)
                                     .accessibilityAddTraits(.isHeader)
-                                Text("Read-only view from your Dossier server.")
-                                    .font(.subheadline)
-                                    .foregroundStyle(DossierPalette.muted)
+                                Button {
+                                    isProfileBasicsPresented = true
+                                } label: {
+                                    Label("Edit profile basics", systemImage: "square.and.pencil")
+                                }
+                                .buttonStyle(.bordered)
                             }
                             VStack(alignment: .leading, spacing: 12) {
                                 ProfileValueView(label: nil, value: profile)
@@ -49,14 +52,12 @@ struct ProfileView: View {
             .navigationTitle("Settings")
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button { model.reopenWelcome() } label: { Image(systemName: "sparkles") }
-                        .accessibilityLabel("Reopen welcome")
+                    Button { model.reopenWelcome() } label: { Image(systemName: "book") }
+                        .accessibilityLabel("Setup guide")
                 }
                 ToolbarItemGroup(placement: .topBarTrailing) {
                     Button { isAboutPresented = true } label: { Image(systemName: "info.circle") }
                         .accessibilityLabel("About Dossier")
-                    Button { isProfileBasicsPresented = true } label: { Image(systemName: "person.crop.circle.badge.pencil") }
-                        .accessibilityLabel("Edit profile basics")
                     Button { Task { await model.refreshProfile() } } label: { Image(systemName: "arrow.clockwise") }
                         .accessibilityLabel("Refresh profile")
                 }
