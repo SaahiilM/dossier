@@ -26,11 +26,11 @@ const DOWNLOADS = {
   },
   darwin: {
     arm64: {
-      node: { url: `https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-darwin-arm64.tar.gz`, sha256: "aa9549349e47dffaa42dcf95d6e06ade8c4bdafc980979883b88767670df385a" },
+      node: { url: `https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-darwin-arm64.tar.gz`, sha256: "ff6e17d4874b76d272212b908cc020d6e815fba5a6c7eaaa06add725840307fd" },
       sqlite: { sha256: "6eaefc8a9c088fea873365f7db2c0f89be6ea021ede62f6a71832f5130826a93" },
     },
     x64: {
-      node: { url: `https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-darwin-x64.tar.gz`, sha256: "d5e336d588c45be0c37dbd52cc29895593009ca4997a77a1fd02815131ed0e52" },
+      node: { url: `https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-darwin-x64.tar.gz`, sha256: "977614af0504c81045e7fd85596dbca0e5f951b96681516dadafedcca8c447f7" },
       sqlite: { sha256: "f9fe570a2ef7d6069196dd595f49bc8592574963dd1f249dcaa8878626773fc9" },
     },
   },
