@@ -7,11 +7,7 @@ run. See the [versioning rules](README.md#releases-and-versioning).
 
 ## Unreleased
 
-- Show the native version, build number, upstream baseline, and fork version in
-  About Dossier, available from sign-in and Settings. Settings also checks the
-  connected server's version. Versioned builds stamp the commit into the app.
-- Publish the version tuple on each merge to fork main. Native and mobile API
-  PRs include a changelog update.
+No unreleased native changes.
 
 ## Merged history
 
@@ -32,6 +28,20 @@ installation date cannot be reconstructed from the bundle.
 | 2026-11-17 | [#9](https://github.com/SaahiilM/dossier/pull/9) · `bedd634`, [#8](https://github.com/SaahiilM/dossier/pull/8) · `b65102d`, [#7](https://github.com/SaahiilM/dossier/pull/7) · `25841c9` | Initial SwiftUI beta with device sign-in, Applications, Profile, capture Inbox, and the Share Extension target. |
 
 ## Distribution history
+
+### iOS 0.1.0 (54) · 2026-11-20 · test iPhone
+
+- Source `80427c5626c3bb7fb3294a236b910d1ce1cfb96a`. Upstream 1.15.1.
+- Installed and confirmed on the iPhone 16 Pro Max. This app-only build uses
+  the existing development provisioning and excludes the Share Extension.
+
+- Show the native version, build number, upstream baseline, and fork version in
+  About Dossier, available from sign-in and Settings. Settings also checks the
+  connected server's version. Versioned builds stamp the commit into the app.
+- Publish the version tuple on each merge to fork main. Native and mobile API
+  PRs include a changelog update.
+
+### Earlier rollouts
 
 - **2026-11-20 · Linux server** — upstream 1.15.1, fork
   `1.15.1+fork.8d6b8a336df5`. Production health and SQLite migration checks
