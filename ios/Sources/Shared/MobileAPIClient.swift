@@ -1,5 +1,16 @@
 import Foundation
 
+struct ServerBuildInfo: Decodable {
+    let version: String
+    let build: String?
+    let forkVersion: String?
+
+    var forkIdentity: String? {
+        if let forkVersion { return forkVersion }
+        return build.map { "\(version)+fork.\($0.prefix(12))" }
+    }
+}
+
 struct MobileAPIClient {
     static let defaultServerAddress = "https://dossier.sahmai.party"
     let serverURL: URL
@@ -18,6 +29,10 @@ struct MobileAPIClient {
         }
         self.serverURL = url
         self.session = session
+    }
+
+    func serverBuildInfo() async throws -> ServerBuildInfo {
+        try await request(url: serverURL.appendingPathComponent("api/health"), method: "GET", token: nil)
     }
 
     func login(password: String, deviceName: String) async throws -> LoginResponse {

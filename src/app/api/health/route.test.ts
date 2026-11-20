@@ -28,6 +28,7 @@ describe("GET /api/health (E12-4)", () => {
       status: "ok",
       version: appVersion,
       build: "d4405d1f9161d47b0c8616f0a39b63c695ac0e48",
+      forkVersion: `${appVersion}+fork.d4405d1f9161`,
       builtAt: "2026-11-17T12:00:00Z",
       db: "ok",
     });

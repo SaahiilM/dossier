@@ -16,6 +16,10 @@
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>CFBundleShortVersionString</key>
 	<string>$(MARKETING_VERSION)</string>
+	<key>DossierUpstreamVersion</key>
+	<string>$(DOSSIER_UPSTREAM_VERSION)</string>
+	<key>DossierForkRevision</key>
+	<string>$(DOSSIER_FORK_REVISION)</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>LSRequiresIPhoneOS</key>

@@ -1,0 +1,45 @@
+name: Native version and changelog
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - name: Require native change notes
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          base=$(git merge-base "$BASE_SHA" "$HEAD_SHA")
+          if ! git diff --quiet "$base" "$HEAD_SHA" -- ios ':(exclude)ios/README.md' ':(exclude)ios/CHANGELOG.md' scripts/build-native-ios.sh src/app/api/mobile src/lib/mobile; then
+            if git diff --quiet "$base" "$HEAD_SHA" -- ios/CHANGELOG.md; then
+              echo "::error file=ios/CHANGELOG.md::Describe the native or mobile API changes in Unreleased."
+              exit 1
+            fi
+            git show "$HEAD_SHA:ios/CHANGELOG.md" | grep -Fx '## Unreleased' >/dev/null
+          fi
+      - name: Record source and native build versions
+        run: |
+          {
+            echo '### Dossier build identity'
+            echo
+            echo '```'
+            scripts/build-native-ios.sh --version
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
