@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { prisma } from "@/lib/prisma";
-import { appVersion } from "@/lib/version";
+import { appVersion, forkVersion } from "@/lib/version";
 
 /** A database that doesn't answer within this counts as down. */
 const DB_TIMEOUT_MS = 3_000;
@@ -12,6 +12,7 @@ const DB_TIMEOUT_MS = 3_000;
  * (the proxy skips it), so it says nothing private: only the version.
  */
 export async function GET() {
+  const build = process.env.DOSSIER_BUILD_SHA;
   const db = await Promise.race([
     prisma.$queryRaw`SELECT 1`.then(() => "ok" as const),
     new Promise<"unreachable">((resolve) => setTimeout(() => resolve("unreachable"), DB_TIMEOUT_MS).unref()),
@@ -20,7 +21,7 @@ export async function GET() {
     {
       status: db === "ok" ? "ok" : "unavailable",
       version: appVersion,
-      ...(process.env.DOSSIER_BUILD_SHA && process.env.DOSSIER_BUILD_SHA !== "unknown" ? { build: process.env.DOSSIER_BUILD_SHA } : {}),
+      ...(build && build !== "unknown" ? { build, forkVersion: forkVersion(build) } : {}),
       ...(process.env.DOSSIER_BUILD_TIME && process.env.DOSSIER_BUILD_TIME !== "unknown" ? { builtAt: process.env.DOSSIER_BUILD_TIME } : {}),
       db,
     },

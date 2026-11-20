@@ -5,6 +5,7 @@ struct ProfileView: View {
     @State private var serverAddress = ""
     @State private var isShowingSignOut = false
     @State private var isProfileBasicsPresented = false
+    @State private var isAboutPresented = false
 
     var body: some View {
         NavigationStack {
@@ -52,6 +53,8 @@ struct ProfileView: View {
                         .accessibilityLabel("Reopen welcome")
                 }
                 ToolbarItemGroup(placement: .topBarTrailing) {
+                    Button { isAboutPresented = true } label: { Image(systemName: "info.circle") }
+                        .accessibilityLabel("About Dossier")
                     Button { isProfileBasicsPresented = true } label: { Image(systemName: "person.crop.circle.badge.pencil") }
                         .accessibilityLabel("Edit profile basics")
                     Button { Task { await model.refreshProfile() } } label: { Image(systemName: "arrow.clockwise") }
@@ -66,6 +69,9 @@ struct ProfileView: View {
             }
         }
         .onAppear { serverAddress = model.serverAddress }
+        .sheet(isPresented: $isAboutPresented) {
+            AboutView(serverAddress: model.serverAddress)
+        }
         .sheet(isPresented: $isProfileBasicsPresented) {
             ProfileBasicsEditorView()
                 .environmentObject(model)

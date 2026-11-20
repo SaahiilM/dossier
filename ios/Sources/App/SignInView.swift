@@ -4,6 +4,7 @@ struct SignInView: View {
     @EnvironmentObject private var model: AppModel
     @State private var password = ""
     @State private var serverAddress = AppModel.defaultServerAddress
+    @State private var isAboutPresented = false
     @FocusState private var passwordFocused: Bool
 
     var body: some View {
@@ -88,6 +89,8 @@ struct SignInView: View {
                             .foregroundStyle(DossierPalette.muted)
                             .fixedSize(horizontal: false, vertical: true)
                     }
+                    Button("About Dossier") { isAboutPresented = true }
+                        .font(.footnote)
                 }
                 .frame(maxWidth: 460, alignment: .leading)
                 .padding(.horizontal, 24)
@@ -98,6 +101,9 @@ struct SignInView: View {
             .background(DossierPalette.canvas)
         }
         .onAppear { serverAddress = model.serverAddress }
+        .sheet(isPresented: $isAboutPresented) {
+            AboutView()
+        }
         .preferredColorScheme(.light)
     }
 

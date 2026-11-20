@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -402,7 +403,15 @@ function createWindow() {
 
 async function start() {
   preferences = readPreferences(preferencesFile());
-  app.setAboutPanelOptions({ applicationName: "Dossier", applicationVersion: app.getVersion(), copyright: "Free software under the AGPL-3.0", website: REPOSITORY_URL, iconPath: ICON });
+  let revision = "";
+  try {
+    revision = readFileSync(path.join(__dirname, "revision.txt"), "utf8").trim();
+  } catch {
+    // A development build may not have run the asset copy.
+  }
+  const version = app.getVersion();
+  const applicationVersion = /^[0-9a-f]{40}$/.test(revision) ? `${version}+fork.${revision.slice(0, 12)}` : version;
+  app.setAboutPanelOptions({ applicationName: "Dossier", applicationVersion, copyright: "Free software under the AGPL-3.0", website: REPOSITORY_URL, iconPath: ICON });
   prepareSessions();
   registerCalls();
   buildMenu();

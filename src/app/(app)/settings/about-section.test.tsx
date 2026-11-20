@@ -34,11 +34,11 @@ describe("About (E10-9)", () => {
 
   it("shows the package version and unique build identity in the install facts", () => {
     render(<AboutSection facts={[
-      { label: "Version", value: "1.13.0" },
-      { label: "Build", value: "1.13.0+d4405d1f9161" },
+      { label: "Upstream version", value: "1.13.0" },
+      { label: "Fork version", value: "1.13.0+fork.d4405d1f9161" },
       { label: "Built", value: "2026-11-17T12:00:00Z" },
     ]} usagePing={ping} updates={updates} />);
-    expect(screen.getByText("1.13.0+d4405d1f9161")).toBeInTheDocument();
+    expect(screen.getByText("1.13.0+fork.d4405d1f9161")).toBeInTheDocument();
     expect(screen.getByText("2026-11-17T12:00:00Z")).toBeInTheDocument();
   });
 

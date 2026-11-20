@@ -16,6 +16,8 @@ settings:
     VERSIONING_SYSTEM: apple-generic
     CURRENT_PROJECT_VERSION: 1
     MARKETING_VERSION: 0.1.0
+    DOSSIER_UPSTREAM_VERSION: Development
+    DOSSIER_FORK_REVISION: Development
 targets:
   Dossier:
     type: application

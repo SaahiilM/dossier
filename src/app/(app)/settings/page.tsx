@@ -19,7 +19,7 @@ import { env } from "@/lib/env";
 import { redirectUri } from "@/lib/google/oauth";
 import { googleClientView, googleView, requestOrigin, whenRan } from "@/lib/settings-views";
 import { lastKnownTimeZone, userTimeZone } from "@/lib/time-zone";
-import { appVersion } from "@/lib/version";
+import { appVersion, forkVersion } from "@/lib/version";
 import { prisma } from "@/lib/prisma";
 import { loadProfileName } from "@/lib/profile-data";
 import { scoringProblem } from "@/lib/scoring";
@@ -216,10 +216,13 @@ async function aboutFacts(): Promise<AboutFacts> {
     prisma.application.count({ where: { awaitingReview: false } }),
   ]);
   return [
-    { label: "Version", value: appVersion },
-    ...(process.env.DOSSIER_BUILD_SHA && process.env.DOSSIER_BUILD_SHA !== "unknown"
-      ? [{ label: "Build", value: `${appVersion}+${process.env.DOSSIER_BUILD_SHA.slice(0, 12)}` }]
-      : []),
+    { label: "Upstream version", value: appVersion },
+    {
+      label: "Fork version",
+      value: process.env.DOSSIER_BUILD_SHA && process.env.DOSSIER_BUILD_SHA !== "unknown"
+        ? forkVersion(process.env.DOSSIER_BUILD_SHA)
+        : "Unavailable",
+    },
     ...(process.env.DOSSIER_BUILD_TIME && process.env.DOSSIER_BUILD_TIME !== "unknown"
       ? [{ label: "Built", value: process.env.DOSSIER_BUILD_TIME }]
       : []),

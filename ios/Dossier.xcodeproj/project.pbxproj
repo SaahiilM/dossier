@@ -33,6 +33,7 @@
 		B6BEB4633CB5A0D7290F7C71 /* libsqlite3.tbd in Frameworks */ = {isa = PBXBuildFile; fileRef = 4FA897F28AAE872988CB81F7 /* libsqlite3.tbd */; };
 		BDB61BA82ECF35AD251E62B2 /* SessionTokenStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = B018A736605C25106CAF9034 /* SessionTokenStore.swift */; };
 		C40DB4A19A0C498167DC7BD7 /* CaptureOutboxStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 748141409FAEB877903F3F47 /* CaptureOutboxStore.swift */; };
+		C6215542EF701B7C4F783E8A /* AboutView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3AE506A4819A458AD5600049 /* AboutView.swift */; };
 		D6C3B9381CC9BDEF2BCCC637 /* MobileModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = B43500FD9762BACE39BEB9B7 /* MobileModels.swift */; };
 		D889EEEAED34FB7A74BC59F5 /* MobileAPIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7CD93057BD3314F19801D37 /* MobileAPIClient.swift */; };
 		E052590798A06982BE383346 /* MessageUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 5C4C677E4640DDDA73BF34DC /* MessageUI.framework */; };
@@ -79,6 +80,7 @@
 		304EFE310D41C4D007CA3ADC /* EmptyStateView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmptyStateView.swift; sourceTree = "<group>"; };
 		34530F7C29254F7DD2ACC763 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		363F5158D3B022E63BF07224 /* CaptureInboxView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureInboxView.swift; sourceTree = "<group>"; };
+		3AE506A4819A458AD5600049 /* AboutView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AboutView.swift; sourceTree = "<group>"; };
 		4429C37E5DE6A9D64EFEBE0E /* StaleDataBanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StaleDataBanner.swift; sourceTree = "<group>"; };
 		4FA897F28AAE872988CB81F7 /* libsqlite3.tbd */ = {isa = PBXFileReference; lastKnownFileType = "sourcecode.text-based-dylib-definition"; name = libsqlite3.tbd; path = usr/lib/libsqlite3.tbd; sourceTree = SDKROOT; };
 		5AEFC30F627AEE3D69323582 /* SignInView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SignInView.swift; sourceTree = "<group>"; };
@@ -159,6 +161,7 @@
 		5ABD5E6AED5F19D1768A35A9 /* App */ = {
 			isa = PBXGroup;
 			children = (
+				3AE506A4819A458AD5600049 /* AboutView.swift */,
 				7D2A992CA8FE18192BCB07CE /* ApplicationDetailView.swift */,
 				05D4D82ADC75C9B9838C8977 /* ApplicationDocumentsView.swift */,
 				9A250CB9086FE91DD9C0C484 /* ApplicationsView.swift */,
@@ -334,6 +337,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				C6215542EF701B7C4F783E8A /* AboutView.swift in Sources */,
 				4D7FAA595C9E2AAAEC089D54 /* AppModel.swift in Sources */,
 				76437DBF529263F2D2756B4F /* ApplicationDetailView.swift in Sources */,
 				6B3997F26AEC35F7109CD4CF /* ApplicationDocumentsView.swift in Sources */,
@@ -428,6 +432,8 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				DEVELOPMENT_TEAM = "";
+				DOSSIER_FORK_REVISION = Development;
+				DOSSIER_UPSTREAM_VERSION = Development;
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
@@ -531,6 +537,8 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				DEVELOPMENT_TEAM = "";
+				DOSSIER_FORK_REVISION = Development;
+				DOSSIER_UPSTREAM_VERSION = Development;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;

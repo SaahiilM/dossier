@@ -1,5 +1,8 @@
 # Native iOS beta handoff
 
+This guide describes the initial beta. See the [native changelog](../ios/CHANGELOG.md)
+for later merges, verification, and device or server releases.
+
 This is a SwiftUI iPhone/iPad app with an embedded Share Extension. It uses the mobile v1 service at an app-configurable base URL, defaulting to `https://dossier.sahmai.party`. The wire DTOs below were checked against `docs/mobile-api-v1.md` on `origin/main` after PR #8 (`b65102d`). No backend files are changed here.
 
 ## Service interface
